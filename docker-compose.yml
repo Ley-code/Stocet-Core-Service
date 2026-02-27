@@ -1,0 +1,46 @@
+services:
+  postgres:
+    image: postgres:15-alpine
+    container_name: stocet_postgres
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: stocet_core
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  core-service:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile
+    container_name: stocet_core_service
+    ports:
+      - "8080:8080"
+    environment:
+      SERVER_PORT: 8080
+      SERVER_HOST: 0.0.0.0
+      ENVIRONMENT: development
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: 5432
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: stocet_core
+      POSTGRES_SSLMODE: disable
+      MONGODB_URL: mongodb+srv://leykun:QO0G695rmMbRSrD2@cluster0.f76x9.mongodb.net/?appName=Cluster0
+      MONGODB_DB_NAME: ethiopian_financial_news
+      JWT_SECRET: change-me-in-production
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

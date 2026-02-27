@@ -1,0 +1,160 @@
+package services
+
+import (
+	"stocet-core-service/internal/models"
+	"stocet-core-service/internal/repositories"
+)
+
+type DashboardService struct {
+	newsService      *NewsService
+	marketDataService *MarketDataService
+	alertsService    *AlertsService
+}
+
+func NewDashboardService(newsService *NewsService, marketDataService *MarketDataService, alertsService *AlertsService) *DashboardService {
+	return &DashboardService{
+		newsService:      newsService,
+		marketDataService: marketDataService,
+		alertsService:    alertsService,
+	}
+}
+
+type DashboardData struct {
+	MarketSummary  MarketSummaryData `json:"market_summary"`
+	TopGainers     []TopMoverData    `json:"top_gainers"`
+	TopLosers      []TopMoverData    `json:"top_losers"`
+	RecentNews     []repositories.NewsArticle `json:"recent_news"`
+	UserAlerts     []models.Alert    `json:"user_alerts"`
+	AlertsSummary  AlertsSummary     `json:"alerts_summary"`
+}
+
+type MarketSummaryData struct {
+	TotalTickers  int     `json:"total_tickers"`
+	AverageChange float64 `json:"average_change"`
+}
+
+type TopMoverData struct {
+	Ticker        string  `json:"ticker"`
+	Price         float64 `json:"price"`
+	PercentChange float64 `json:"percent_change"`
+}
+
+type AlertsSummary struct {
+	Total    int `json:"total"`
+	Active   int `json:"active"`
+	Triggered int `json:"triggered"`
+}
+
+func (s *DashboardService) GetDashboardData(userID string) (*DashboardData, error) {
+	// Get market data
+	prices, err := s.marketDataService.GetLatestAll()
+	if err != nil {
+		return nil, err
+	}
+
+	// Build market summary
+	marketSummary := s.buildMarketSummary(prices)
+	topGainers, topLosers := s.getTopMovers(prices)
+
+	// Get recent news
+	newsFilters := map[string]interface{}{}
+	recentNews, err := s.newsService.GetNews(newsFilters, 5, 0)
+	if err != nil {
+		recentNews = []repositories.NewsArticle{}
+	}
+
+	// Get user alerts
+	userAlerts, err := s.alertsService.GetByUserID(userID)
+	if err != nil {
+		userAlerts = []models.Alert{}
+	}
+
+	alertsSummary := s.buildAlertsSummary(userAlerts)
+
+	return &DashboardData{
+		MarketSummary: marketSummary,
+		TopGainers:    topGainers,
+		TopLosers:     topLosers,
+		RecentNews:    recentNews,
+		UserAlerts:    userAlerts,
+		AlertsSummary: alertsSummary,
+	}, nil
+}
+
+func (s *DashboardService) buildMarketSummary(prices []repositories.MarketPrice) MarketSummaryData {
+	if len(prices) == 0 {
+		return MarketSummaryData{}
+	}
+
+	totalChange := 0.0
+	for _, price := range prices {
+		totalChange += price.PercentChange
+	}
+
+	return MarketSummaryData{
+		TotalTickers:  len(prices),
+		AverageChange: totalChange / float64(len(prices)),
+	}
+}
+
+func (s *DashboardService) getTopMovers(prices []repositories.MarketPrice) ([]TopMoverData, []TopMoverData) {
+	gainers := make([]TopMoverData, 0)
+	losers := make([]TopMoverData, 0)
+
+	for _, price := range prices {
+		mover := TopMoverData{
+			Ticker:        price.TickerSymbol,
+			Price:         price.Price,
+			PercentChange: price.PercentChange,
+		}
+
+		if price.PercentChange > 0 {
+			gainers = append(gainers, mover)
+		} else if price.PercentChange < 0 {
+			losers = append(losers, mover)
+		}
+	}
+
+	// Sort and limit
+	topGainers := s.sortAndLimit(gainers, true, 5)
+	topLosers := s.sortAndLimit(losers, false, 5)
+
+	return topGainers, topLosers
+}
+
+func (s *DashboardService) sortAndLimit(movers []TopMoverData, ascending bool, limit int) []TopMoverData {
+	for i := 0; i < len(movers)-1; i++ {
+		for j := i + 1; j < len(movers); j++ {
+			if ascending {
+				if movers[i].PercentChange < movers[j].PercentChange {
+					movers[i], movers[j] = movers[j], movers[i]
+				}
+			} else {
+				if movers[i].PercentChange > movers[j].PercentChange {
+					movers[i], movers[j] = movers[j], movers[i]
+				}
+			}
+		}
+	}
+
+	if len(movers) > limit {
+		return movers[:limit]
+	}
+	return movers
+}
+
+func (s *DashboardService) buildAlertsSummary(alerts []models.Alert) AlertsSummary {
+	summary := AlertsSummary{
+		Total: len(alerts),
+	}
+
+	for _, alert := range alerts {
+		if alert.Status == "active" {
+			summary.Active++
+		} else if alert.Status == "triggered" {
+			summary.Triggered++
+		}
+	}
+
+	return summary
+}
