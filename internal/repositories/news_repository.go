@@ -19,10 +19,9 @@ type NewsArticle struct {
 	Source        string              `bson:"source" json:"source"`
 	PublishedDate time.Time           `bson:"published_date" json:"published_date"`
 	Content       string              `bson:"content" json:"content"`
-	Summary       string              `bson:"summary" json:"summary"`
+	Summary       string              `bson:"summary,omitempty" json:"summary,omitempty"`
 	Tags          []string            `bson:"tags" json:"tags"`
-	ImageURL      string              `bson:"image_url" json:"image_url"`
-	Category      string              `bson:"category" json:"category"`
+	ImageURL      string              `bson:"image_url,omitempty" json:"image_url,omitempty"`
 }
 
 type NewsRepository struct {
@@ -32,7 +31,7 @@ type NewsRepository struct {
 func NewNewsRepository(client *mongo.Client) *NewsRepository {
 	db := client.Database(config.AppConfig.MongoDBDBName)
 	return &NewsRepository{
-		collection: db.Collection("news_articles"),
+		collection: db.Collection("articles"), // Collection name from news-aggregation service
 	}
 }
 
@@ -43,7 +42,8 @@ func (r *NewsRepository) GetNews(filters map[string]interface{}, limit, skip int
 	filter := bson.M{}
 
 	if category, ok := filters["category"].(string); ok && category != "" {
-		filter["category"] = category
+		// Category is stored in tags array in the news-aggregation service
+		filter["tags"] = category
 	}
 
 	if source, ok := filters["source"].(string); ok && source != "" {
