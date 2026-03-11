@@ -25,12 +25,16 @@ func (c *NewsController) GetNews(ctx *gin.Context) {
 
 	var startDate, endDate *time.Time
 	if startDateStr := ctx.Query("start_date"); startDateStr != "" {
-		if parsed, err := time.Parse(time.RFC3339, startDateStr); err == nil {
+		if parsed, err := utils.ParseDate(startDateStr); err == nil {
 			startDate = &parsed
 		}
 	}
 	if endDateStr := ctx.Query("end_date"); endDateStr != "" {
-		if parsed, err := time.Parse(time.RFC3339, endDateStr); err == nil {
+		if parsed, err := utils.ParseDate(endDateStr); err == nil {
+			// Set end_date to end of day if it's a simple date format
+			if len(endDateStr) == 10 { // Simple date format "YYYY-MM-DD"
+				parsed = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, time.UTC)
+			}
 			endDate = &parsed
 		}
 	}

@@ -13,16 +13,16 @@ import (
 )
 
 type NewsArticle struct {
-	ID           primitive.ObjectID `bson:"_id" json:"id"`
-	Title        string             `bson:"title" json:"title"`
-	URL          string             `bson:"url" json:"url"`
-	Source       string             `bson:"source" json:"source"`
-	PublishedDate time.Time         `bson:"published_date" json:"published_date"`
-	Content      string             `bson:"content" json:"content"`
-	Summary      string             `bson:"summary" json:"summary"`
-	Tags         []string           `bson:"tags" json:"tags"`
-	ImageURL     string             `bson:"image_url" json:"image_url"`
-	Category     string             `bson:"category" json:"category"`
+	ID            *primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
+	Title         string              `bson:"title" json:"title"`
+	URL           string              `bson:"url" json:"url"`
+	Source        string              `bson:"source" json:"source"`
+	PublishedDate time.Time           `bson:"published_date" json:"published_date"`
+	Content       string              `bson:"content" json:"content"`
+	Summary       string              `bson:"summary" json:"summary"`
+	Tags          []string            `bson:"tags" json:"tags"`
+	ImageURL      string              `bson:"image_url" json:"image_url"`
+	Category      string              `bson:"category" json:"category"`
 }
 
 type NewsRepository struct {

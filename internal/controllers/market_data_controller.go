@@ -65,16 +65,21 @@ func (c *MarketDataController) GetPriceHistory(ctx *gin.Context) {
 		return
 	}
 
-	startDate, err := time.Parse(time.RFC3339, startDateStr)
+	startDate, err := utils.ParseDate(startDateStr)
 	if err != nil {
-		utils.BadRequest(ctx, "Invalid start_date format")
+		utils.BadRequest(ctx, "Invalid start_date format. Use YYYY-MM-DD or RFC3339 format")
 		return
 	}
 
-	endDate, err := time.Parse(time.RFC3339, endDateStr)
+	endDate, err := utils.ParseDate(endDateStr)
 	if err != nil {
-		utils.BadRequest(ctx, "Invalid end_date format")
+		utils.BadRequest(ctx, "Invalid end_date format. Use YYYY-MM-DD or RFC3339 format")
 		return
+	}
+
+	// Set end_date to end of day if it's a simple date format
+	if len(endDateStr) == 10 { // Simple date format "YYYY-MM-DD"
+		endDate = time.Date(endDate.Year(), endDate.Month(), endDate.Day(), 23, 59, 59, 999999999, time.UTC)
 	}
 
 	prices, err := c.service.GetByTickerAndDateRange(ticker, startDate, endDate)

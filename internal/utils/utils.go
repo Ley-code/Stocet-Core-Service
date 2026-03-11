@@ -1,7 +1,9 @@
 package utils
 
 import (
+	"fmt"
 	"net/http"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -117,4 +119,39 @@ func parseInt(s string) int {
 // ParseInt is a public version of parseInt
 func ParseInt(s string) int {
 	return parseInt(s)
+}
+
+// ParseDate parses a date string in multiple formats
+// Supports: RFC3339, "2006-01-02", "2006-01-02T15:04:05Z", "2006-01-02 15:04:05"
+func ParseDate(dateStr string) (time.Time, error) {
+	if dateStr == "" {
+		return time.Time{}, fmt.Errorf("empty date string")
+	}
+
+	// Try RFC3339 format first (full ISO 8601 with timezone)
+	if t, err := time.Parse(time.RFC3339, dateStr); err == nil {
+		return t, nil
+	}
+
+	// Try RFC3339 without timezone
+	if t, err := time.Parse("2006-01-02T15:04:05", dateStr); err == nil {
+		return t, nil
+	}
+
+	// Try simple date format "2006-01-02" (set to start of day UTC)
+	if t, err := time.Parse("2006-01-02", dateStr); err == nil {
+		return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, time.UTC), nil
+	}
+
+	// Try date with time "2006-01-02 15:04:05"
+	if t, err := time.Parse("2006-01-02 15:04:05", dateStr); err == nil {
+		return t, nil
+	}
+
+	// Try date with time and timezone "2006-01-02 15:04:05 -0700"
+	if t, err := time.Parse("2006-01-02 15:04:05 -0700", dateStr); err == nil {
+		return t, nil
+	}
+
+	return time.Time{}, fmt.Errorf("unable to parse date: %s", dateStr)
 }

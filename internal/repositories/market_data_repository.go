@@ -13,13 +13,13 @@ import (
 )
 
 type MarketPrice struct {
-	ID           primitive.ObjectID `bson:"_id" json:"id"`
-	TickerSymbol string             `bson:"ticker_symbol" json:"ticker_symbol"`
-	Price        float64            `bson:"price" json:"price"`
-	PercentChange float64            `bson:"percent_change" json:"percent_change"`
-	Variation    float64            `bson:"variation" json:"variation"`
-	Timestamp    time.Time          `bson:"timestamp" json:"timestamp"`
-	Source       string             `bson:"source" json:"source"`
+	ID            *primitive.ObjectID `bson:"_id,omitempty" json:"id,omitempty"`
+	TickerSymbol  string              `bson:"ticker_symbol" json:"ticker_symbol"`
+	Price         float64             `bson:"price" json:"price"`
+	PercentChange float64             `bson:"percent_change" json:"percent_change"`
+	Variation     float64             `bson:"variation" json:"variation"`
+	Timestamp     time.Time           `bson:"timestamp" json:"timestamp"`
+	Source        string              `bson:"source" json:"source"`
 }
 
 type MarketDataRepository struct {
@@ -44,13 +44,24 @@ func (r *MarketDataRepository) GetLatestAll() ([]MarketPrice, error) {
 		},
 		{
 			"$group": bson.M{
-				"_id":           "$ticker_symbol",
-				"ticker_symbol": bson.M{"$first": "$ticker_symbol"},
-				"price":         bson.M{"$first": "$price"},
+				"_id":            "$ticker_symbol",
+				"ticker_symbol":  bson.M{"$first": "$ticker_symbol"},
+				"price":          bson.M{"$first": "$price"},
 				"percent_change": bson.M{"$first": "$percent_change"},
 				"variation":      bson.M{"$first": "$variation"},
 				"timestamp":      bson.M{"$first": "$timestamp"},
 				"source":         bson.M{"$first": "$source"},
+			},
+		},
+		{
+			"$project": bson.M{
+				"_id":            0, // Exclude _id from result since it's the ticker symbol
+				"ticker_symbol":  1,
+				"price":          1,
+				"percent_change": 1,
+				"variation":      1,
+				"timestamp":      1,
+				"source":         1,
 			},
 		},
 		{
