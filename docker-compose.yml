@@ -34,7 +34,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: stocet_core
       POSTGRES_SSLMODE: disable
-      MONGODB_URL: mongodb+srv://leykun:QO0G695rmMbRSrD2@cluster0.f76x9.mongodb.net/?appName=Cluster0
+      MONGODB_URL: mongodb+srv://leykunbirhanu:L-wL-c9r65Ym5gh@cluster0.dajaxnn.mongodb.net/?appName=Cluster0
       MONGODB_DB_NAME: ethiopian_financial_news
       JWT_SECRET: change-me-in-production
     depends_on:

@@ -5,12 +5,12 @@ The core backend service for the Stocet platform, providing RBAC, authentication
 ## Features
 
 - **Authentication & Authorization**: JWT-based authentication with role-based access control (Admin, User, Researcher)
-- **News Endpoints**: Read news articles from MongoDB (shared with news-aggregation service)
+- **News Endpoints**: Read news articles from MongoDB (acting as the sole gateway for aggregated news)
 - **Market Data**: Access to market prices, tickers, price history, and technical indicators
 - **Brokers Management**: CRUD operations for broker information (Admin only for create/update/delete)
 - **Education**: Courses, lessons, quizzes, and glossary management
 - **Chat Service**: REST API and WebSocket support for real-time messaging
-- **Alerts**: User alerts for price/volume monitoring
+- **Alerts & Watchlist**: User alerts for price/volume monitoring, and customizable stock watchlists
 - **Analytics**: Dashboard metrics, market overview, and platform health
 - **Admin Tools**: User management, platform analytics, and content moderation
 

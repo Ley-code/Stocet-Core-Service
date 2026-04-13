@@ -44,6 +44,7 @@ func main() {
 	alertsRepo := repositories.NewAlertsRepository()
 	newsRepo := repositories.NewNewsRepository(database.MongoDBClient)
 	marketDataRepo := repositories.NewMarketDataRepository(database.MongoDBClient)
+	watchlistRepo := repositories.NewWatchlistRepository()
 
 	// Initialize services
 	authService := services.NewAuthService(userRepo)
@@ -55,9 +56,10 @@ func main() {
 	marketDataService := services.NewMarketDataService(marketDataRepo)
 	analyticsService := services.NewAnalyticsService(marketDataService)
 	dashboardService := services.NewDashboardService(newsService, marketDataService, alertsService)
+	watchlistService := services.NewWatchlistService(watchlistRepo)
 
 	// Initialize controllers
-	authController := controllers.NewAuthController(authService)
+	authController := controllers.NewAuthController(authService, userRepo)
 	brokersController := controllers.NewBrokersController(brokersService)
 	educationController := controllers.NewEducationController(educationService)
 	chatController := controllers.NewChatController(chatService)
@@ -67,6 +69,7 @@ func main() {
 	analyticsController := controllers.NewAnalyticsController(analyticsService)
 	dashboardController := controllers.NewDashboardController(dashboardService)
 	adminController := controllers.NewAdminController(userRepo)
+	watchlistController := controllers.NewWatchlistController(watchlistService)
 
 	// Setup Gin router
 	if config.AppConfig.Environment == "production" {
@@ -96,6 +99,7 @@ func main() {
 		routes.SetupAnalyticsRoutes(api, analyticsController)
 		routes.SetupDashboardRoutes(api, dashboardController)
 		routes.SetupAdminRoutes(api, adminController)
+		routes.SetupWatchlistRoutes(api, watchlistController)
 	}
 
 	// Start server
@@ -105,3 +109,4 @@ func main() {
 		log.Fatal("Failed to start server:", err)
 	}
 }
+

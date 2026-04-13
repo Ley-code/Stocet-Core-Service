@@ -60,6 +60,7 @@ func AutoMigrate() error {
 		&models.Message{},
 		&models.Alert{},
 		&models.Subscription{},
+		&models.Watchlist{},
 	)
 }
 
