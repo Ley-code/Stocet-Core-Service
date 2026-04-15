@@ -43,7 +43,7 @@ type Question struct {
 	ID       string         `gorm:"primaryKey;type:uuid;default:gen_random_uuid()" json:"id"`
 	QuizID   string         `gorm:"type:uuid;not null;index" json:"quiz_id"`
 	Question string         `gorm:"not null" json:"question"`
-	Options  datatypes.JSON `gorm:"type:jsonb" json:"options"`
+	Options  datatypes.JSON `gorm:"type:jsonb;serializer:json" json:"options"`
 	Correct  int            `gorm:"not null" json:"correct"`
 }
 
@@ -61,7 +61,7 @@ type QuizSubmission struct {
 	UserID    uuid.UUID      `gorm:"type:uuid;not null;index" json:"user_id"`
 	LessonID  uuid.UUID      `gorm:"type:uuid;not null;index" json:"lesson_id"`
 	QuizID    uuid.UUID      `gorm:"type:uuid;not null;index" json:"quiz_id"`
-	Answers   datatypes.JSON `gorm:"type:jsonb" json:"answers"`
+	Answers   datatypes.JSON `gorm:"type:jsonb;serializer:json" json:"answers"`
 	Score     float64        `json:"score"`
 	CreatedAt time.Time      `json:"created_at"`
 }
