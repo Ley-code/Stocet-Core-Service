@@ -51,7 +51,7 @@ func (s *AuthService) Login(req LoginRequest) (*AuthResponse, error) {
 	}
 
 	// Generate token
-	token, err := utils.GenerateToken(user.ID, user.Email, user.Role)
+	token, err := utils.GenerateToken(user.ID, user.Email, string(user.Role))
 	if err != nil {
 		return nil, errors.New("failed to generate token")
 	}
@@ -90,8 +90,8 @@ func (s *AuthService) Signup(req SignupRequest) (*AuthResponse, error) {
 		ID:                 uuid.New().String(),
 		Email:              req.Email,
 		PasswordHash:       hashedPassword,
-		Role:               config.USER_ROLE,
-		SubscriptionStatus: config.SUBSCRIPTION_FREE,
+		Role:               models.UserRole(config.USER_ROLE),
+		SubscriptionStatus: models.SubscriptionStatus(config.SUBSCRIPTION_FREE),
 	}
 
 	if err := s.userRepo.Create(user); err != nil {
@@ -99,7 +99,7 @@ func (s *AuthService) Signup(req SignupRequest) (*AuthResponse, error) {
 	}
 
 	// Generate token
-	token, err := utils.GenerateToken(user.ID, user.Email, user.Role)
+	token, err := utils.GenerateToken(user.ID, user.Email, string(user.Role))
 	if err != nil {
 		return nil, errors.New("failed to generate token")
 	}

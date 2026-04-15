@@ -3,14 +3,15 @@ package models
 import (
 	"time"
 
+	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
 type Watchlist struct {
-	ID        string    `gorm:"primaryKey;type:uuid;default:gen_random_uuid()" json:"id"`
-	UserID    string    `gorm:"not null;index" json:"user_id"`
-	Ticker    string    `gorm:"not null" json:"ticker"`
-	CreatedAt time.Time `json:"created_at"`
+	ID        string         `gorm:"primaryKey;type:uuid;default:gen_random_uuid()" json:"id"`
+	UserID    uuid.UUID      `gorm:"type:uuid;not null;index" json:"user_id"`
+	Ticker    string         `gorm:"not null" json:"ticker"`
+	CreatedAt time.Time      `json:"created_at"`
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 }
 

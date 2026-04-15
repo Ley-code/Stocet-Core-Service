@@ -1,9 +1,13 @@
 package services
 
 import (
+	"encoding/json"
 	"errors"
 	"stocet-core-service/internal/models"
 	"stocet-core-service/internal/repositories"
+
+	"github.com/google/uuid"
+	"gorm.io/datatypes"
 )
 
 type EducationService struct {
@@ -85,11 +89,16 @@ func (s *EducationService) SubmitQuiz(userID, lessonID string, answers []int) (*
 
 	score := float64(correct) / float64(len(quiz.Questions)) * 100
 
+	answersBytes, err := json.Marshal(answers)
+	if err != nil {
+		return nil, errors.New("failed to marshal answers")
+	}
+
 	submission := &models.QuizSubmission{
-		UserID:   userID,
-		LessonID: lessonID,
-		QuizID:   quiz.ID,
-		Answers:  answers,
+		UserID:   uuid.MustParse(userID),
+		LessonID: uuid.MustParse(lessonID),
+		QuizID:   uuid.MustParse(quiz.ID),
+		Answers:  datatypes.JSON(answersBytes),
 		Score:    score,
 	}
 

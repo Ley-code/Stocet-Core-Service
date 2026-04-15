@@ -6,6 +6,7 @@ import (
 	"stocet-core-service/internal/utils"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 type AlertsController struct {
@@ -37,7 +38,13 @@ func (c *AlertsController) Create(ctx *gin.Context) {
 		return
 	}
 
-	alert.UserID = userID.(string)
+	userUUID, err := uuid.Parse(userID.(string))
+	if err != nil {
+		utils.BadRequest(ctx, "Invalid user ID format")
+		return
+	}
+
+	alert.UserID = userUUID
 	alert.Status = "active"
 
 	if err := c.service.Create(&alert); err != nil {
@@ -59,7 +66,7 @@ func (c *AlertsController) Update(ctx *gin.Context) {
 		return
 	}
 
-	if alert.UserID != userID.(string) {
+	if alert.UserID.String() != userID.(string) {
 		utils.Forbidden(ctx, "You can only update your own alerts")
 		return
 	}
@@ -70,8 +77,14 @@ func (c *AlertsController) Update(ctx *gin.Context) {
 		return
 	}
 
+	userUUID, err := uuid.Parse(userID.(string))
+	if err != nil {
+		utils.BadRequest(ctx, "Invalid user ID format")
+		return
+	}
+
 	updateAlert.ID = id
-	updateAlert.UserID = userID.(string)
+	updateAlert.UserID = userUUID
 
 	if err := c.service.Update(&updateAlert); err != nil {
 		utils.BadRequest(ctx, err.Error())
@@ -92,7 +105,7 @@ func (c *AlertsController) Delete(ctx *gin.Context) {
 		return
 	}
 
-	if alert.UserID != userID.(string) {
+	if alert.UserID.String() != userID.(string) {
 		utils.Forbidden(ctx, "You can only delete your own alerts")
 		return
 	}

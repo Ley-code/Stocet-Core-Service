@@ -5,6 +5,8 @@ import (
 	"stocet-core-service/internal/config"
 	"stocet-core-service/internal/models"
 	"stocet-core-service/internal/repositories"
+
+	"github.com/google/uuid"
 )
 
 type ChatService struct {
@@ -37,7 +39,7 @@ func (s *ChatService) CreateMessage(channelID, userID, content string) (*models.
 
 	message := &models.Message{
 		ChannelID: channelID,
-		UserID:    userID,
+		UserID:    uuid.MustParse(userID),
 		Content:   content,
 	}
 

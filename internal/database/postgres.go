@@ -5,7 +5,6 @@ import (
 	"log"
 
 	"stocet-core-service/internal/config"
-	"stocet-core-service/internal/models"
 
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -42,31 +41,10 @@ func InitDB() error {
 
 	log.Println("Connected to PostgreSQL database")
 
-	// Auto-migrate all models
-	if err := AutoMigrate(); err != nil {
-		return fmt.Errorf("failed to auto-migrate: %w", err)
-	}
+	// NOTE: Schema migrations are managed by golang-migrate.
+	// Run `make migrate-up` to apply pending migrations.
 
 	return nil
-}
-
-// AutoMigrate runs database migrations
-func AutoMigrate() error {
-	return DB.AutoMigrate(
-		&models.User{},
-		&models.Broker{},
-		&models.Course{},
-		&models.Lesson{},
-		&models.Quiz{},
-		&models.Question{},
-		&models.GlossaryTerm{},
-		&models.QuizSubmission{},
-		&models.Channel{},
-		&models.Message{},
-		&models.Alert{},
-		&models.Subscription{},
-		&models.Watchlist{},
-	)
 }
 
 // CloseDB closes the database connection

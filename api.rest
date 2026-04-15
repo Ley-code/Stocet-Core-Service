@@ -1,0 +1,264 @@
+@baseUrl = http://localhost:8080/api/v1
+@token = your_user_token_here
+@adminToken = your_admin_token_here
+
+### Health Check
+GET {{baseUrl}}/health
+
+### --- AUTH ---
+
+# @name login
+POST {{baseUrl}}/auth/login
+Content-Type: application/json
+
+{
+    "email": "user@example.com",
+    "password": "password123"
+}
+
+### signup
+POST {{baseUrl}}/auth/signup
+Content-Type: application/json
+
+{
+    "email": "newuser@example.com",
+    "password": "password123",
+    "first_name": "New",
+    "last_name": "User"
+}
+
+### get me
+GET {{baseUrl}}/auth/me
+Authorization: Bearer {{token}}
+
+### delete account
+DELETE {{baseUrl}}/auth/me
+Authorization: Bearer {{token}}
+
+
+### --- NEWS ---
+
+### get news
+GET {{baseUrl}}/news
+Authorization: Bearer {{token}}
+
+### delete news (Admin)
+DELETE {{baseUrl}}/news/1
+Authorization: Bearer {{adminToken}}
+
+
+### --- MARKET DATA ---
+
+### get market prices
+GET {{baseUrl}}/market-prices
+Authorization: Bearer {{token}}
+
+### get tickers
+GET {{baseUrl}}/market-prices/tickers
+Authorization: Bearer {{token}}
+
+### get ticker price
+GET {{baseUrl}}/market-prices/AAPL
+Authorization: Bearer {{token}}
+
+### get price history
+GET {{baseUrl}}/market-prices/AAPL/history
+Authorization: Bearer {{token}}
+
+### get technical indicators
+GET {{baseUrl}}/market-prices/AAPL/indicators
+Authorization: Bearer {{token}}
+
+
+### --- BROKERS ---
+
+### list brokers
+GET {{baseUrl}}/brokers
+Authorization: Bearer {{token}}
+
+### get broker by id
+GET {{baseUrl}}/brokers/1
+Authorization: Bearer {{token}}
+
+### create broker (Admin)
+POST {{baseUrl}}/brokers
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "name": "New Broker",
+    "type": "Full Service"
+}
+
+### update broker (Admin)
+PUT {{baseUrl}}/brokers/1
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "name": "Updated Broker"
+}
+
+### delete broker (Admin)
+DELETE {{baseUrl}}/brokers/1
+Authorization: Bearer {{adminToken}}
+
+
+### --- EDUCATION ---
+
+### list courses
+GET {{baseUrl}}/education/courses
+
+### get course
+GET {{baseUrl}}/education/courses/1
+
+### get lesson
+GET {{baseUrl}}/education/lessons/1
+
+### submit quiz
+POST {{baseUrl}}/education/quizzes/1/submit
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "answers": [1, 2, 3]
+}
+
+### list glossary
+GET {{baseUrl}}/education/glossary
+
+### create course (Admin)
+POST {{baseUrl}}/education/courses
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "title": "New Course"
+}
+
+### update course (Admin)
+PUT {{baseUrl}}/education/courses/1
+Authorization: Bearer {{adminToken}}
+
+### delete course (Admin)
+DELETE {{baseUrl}}/education/courses/1
+Authorization: Bearer {{adminToken}}
+
+
+### --- CHAT ---
+
+### list channels
+GET {{baseUrl}}/chat/channels
+Authorization: Bearer {{token}}
+
+### get messages
+GET {{baseUrl}}/chat/channels/1/messages
+Authorization: Bearer {{token}}
+
+### send message
+POST {{baseUrl}}/chat/channels/1/messages
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "content": "Hello world!"
+}
+
+### create channel (Admin)
+POST {{baseUrl}}/chat/channels
+Authorization: Bearer {{adminToken}}
+Content-Type: application/json
+
+{
+    "name": "Support"
+}
+
+
+### --- ALERTS ---
+
+### list alerts
+GET {{baseUrl}}/alerts
+Authorization: Bearer {{token}}
+
+### create alert
+POST {{baseUrl}}/alerts
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "ticker": "AAPL",
+    "condition": "above",
+    "value": 200
+}
+
+### update alert
+PUT {{baseUrl}}/alerts/1
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "value": 210
+}
+
+### delete alert
+DELETE {{baseUrl}}/alerts/1
+Authorization: Bearer {{token}}
+
+
+### --- ANALYTICS ---
+
+### get dashboard metrics
+GET {{baseUrl}}/analytics/dashboard
+
+### get market overview
+GET {{baseUrl}}/analytics/market-overview
+
+### get user activity (Admin)
+GET {{baseUrl}}/analytics/user-activity/1
+Authorization: Bearer {{adminToken}}
+
+### get platform health (Admin)
+GET {{baseUrl}}/analytics/platform-health
+Authorization: Bearer {{adminToken}}
+
+
+### --- DASHBOARD ---
+
+### get dashboard
+GET {{baseUrl}}/dashboard
+Authorization: Bearer {{token}}
+
+
+### --- ADMIN ---
+
+### list users
+GET {{baseUrl}}/admin/users
+Authorization: Bearer {{adminToken}}
+
+### update user
+PUT {{baseUrl}}/admin/users/1
+Authorization: Bearer {{adminToken}}
+
+### delete user
+DELETE {{baseUrl}}/admin/users/1
+Authorization: Bearer {{adminToken}}
+
+
+### --- WATCHLIST ---
+
+### list watchlist
+GET {{baseUrl}}/watchlist
+Authorization: Bearer {{token}}
+
+### add to watchlist
+POST {{baseUrl}}/watchlist
+Authorization: Bearer {{token}}
+Content-Type: application/json
+
+{
+    "ticker": "AAPL"
+}
+
+### remove from watchlist
+DELETE {{baseUrl}}/watchlist/1
+Authorization: Bearer {{token}}
