@@ -1,7 +1,9 @@
 package main
 
 import (
+	"context"
 	"log"
+	"os"
 	"stocet-core-service/internal/config"
 	"stocet-core-service/internal/controllers"
 	"stocet-core-service/internal/database"
@@ -10,10 +12,23 @@ import (
 	"stocet-core-service/internal/routes"
 	"stocet-core-service/internal/services"
 
+	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-lambda-go/lambda"
+	ginadapter "github.com/awslabs/aws-lambda-go-api-proxy/gin"
 	"github.com/gin-gonic/gin"
 )
 
-func main() {
+var ginLambda *ginadapter.GinLambdaV2
+
+// Handler is the Lambda entry point that proxies API Gateway requests to the Gin router.
+func Handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
+	return ginLambda.ProxyWithContext(ctx, req)
+}
+
+// SetupRouter initialises all dependencies and returns the fully configured Gin engine.
+// The function is safe to call multiple times (e.g. Lambda warm starts) because the
+// underlying database connections use singleton guards.
+func SetupRouter() *gin.Engine {
 	// Load configuration
 	if err := config.LoadConfig(); err != nil {
 		log.Fatal("Failed to load config:", err)
@@ -23,7 +38,6 @@ func main() {
 	if err := database.InitDB(); err != nil {
 		log.Fatal("Failed to initialize database:", err)
 	}
-	defer database.CloseDB()
 
 	// Seed initial admin user
 	if err := database.SeedInitialAdmin(); err != nil {
@@ -34,7 +48,6 @@ func main() {
 	if err := database.InitMongoDB(); err != nil {
 		log.Fatal("Failed to initialize MongoDB:", err)
 	}
-	defer database.CloseMongoDB()
 
 	// Initialize repositories
 	userRepo := repositories.NewUserRepository()
@@ -102,11 +115,25 @@ func main() {
 		routes.SetupWatchlistRoutes(api, watchlistController)
 	}
 
-	// Start server
-	addr := config.AppConfig.ServerHost + ":" + config.AppConfig.ServerPort
-	log.Printf("Server starting on %s", addr)
-	if err := router.Run(addr); err != nil {
-		log.Fatal("Failed to start server:", err)
-	}
+	return router
 }
 
+func main() {
+	router := SetupRouter()
+
+	if os.Getenv("LAMBDA_TASK_ROOT") != "" {
+		// Running on AWS Lambda — bridge via API Gateway adapter
+		ginLambda = ginadapter.NewV2(router)
+		lambda.Start(Handler)
+	} else {
+		// Running locally — standard HTTP server
+		defer database.CloseDB()
+		defer database.CloseMongoDB()
+
+		addr := config.AppConfig.ServerHost + ":" + config.AppConfig.ServerPort
+		log.Printf("Server starting on %s", addr)
+		if err := router.Run(addr); err != nil {
+			log.Fatal("Failed to start server:", err)
+		}
+	}
+}

@@ -13,8 +13,13 @@ import (
 
 var MongoDBClient *mongo.Client
 
-// InitMongoDB initializes the MongoDB connection for reading news/market data
+// InitMongoDB initializes the MongoDB connection for reading news/market data.
+// On subsequent calls (e.g. Lambda warm starts) the existing connection is reused.
 func InitMongoDB() error {
+	if MongoDBClient != nil {
+		return nil
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
