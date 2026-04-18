@@ -70,37 +70,41 @@ GET {{baseUrl}}/market-prices/AAPL/indicators
 Authorization: Bearer {{token}}
 
 
-### --- BROKERS ---
+### --- CAPITAL SERVICE PROVIDERS ---
 
-### list brokers
-GET {{baseUrl}}/brokers
+### list CSPs
+GET {{baseUrl}}/capital-service-providers
 Authorization: Bearer {{token}}
 
-### get broker by id
-GET {{baseUrl}}/brokers/1
+### get CSP by id
+GET {{baseUrl}}/capital-service-providers/{{cspId}}
 Authorization: Bearer {{token}}
 
-### create broker (Admin)
-POST {{baseUrl}}/brokers
+### create CSP (Admin)
+POST {{baseUrl}}/capital-service-providers
 Authorization: Bearer {{adminToken}}
 Content-Type: application/json
 
 {
-    "name": "New Broker",
-    "type": "Full Service"
+    "name": "Example CMSP",
+    "license_number": "ECMA-0001",
+    "category": "Securities Dealer",
+    "status": "Active",
+    "services": ["Equity Trading"],
+    "paid_up_capital": 10000000
 }
 
-### update broker (Admin)
-PUT {{baseUrl}}/brokers/1
+### update CSP (Admin)
+PUT {{baseUrl}}/capital-service-providers/{{cspId}}
 Authorization: Bearer {{adminToken}}
 Content-Type: application/json
 
 {
-    "name": "Updated Broker"
+    "name": "Updated CMSP"
 }
 
-### delete broker (Admin)
-DELETE {{baseUrl}}/brokers/1
+### delete CSP (Admin)
+DELETE {{baseUrl}}/capital-service-providers/{{cspId}}
 Authorization: Bearer {{adminToken}}
 
 

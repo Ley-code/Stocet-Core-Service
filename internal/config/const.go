@@ -16,13 +16,13 @@ const (
 
 // Permission constants
 const (
-	PERMISSION_READ_NEWS        = "read:news"
-	PERMISSION_DELETE_NEWS      = "delete:news"
-	PERMISSION_MANAGE_BROKERS   = "manage:brokers"
-	PERMISSION_MANAGE_EDUCATION = "manage:education"
-	PERMISSION_MANAGE_USERS     = "manage:users"
-	PERMISSION_VIEW_ANALYTICS   = "view:analytics"
-	PERMISSION_MANAGE_ALERTS    = "manage:alerts"
+	PERMISSION_READ_NEWS                        = "read:news"
+	PERMISSION_DELETE_NEWS                      = "delete:news"
+	PERMISSION_MANAGE_CAPITAL_SERVICE_PROVIDERS = "manage:capital_service_providers"
+	PERMISSION_MANAGE_EDUCATION                 = "manage:education"
+	PERMISSION_MANAGE_USERS                     = "manage:users"
+	PERMISSION_VIEW_ANALYTICS                   = "view:analytics"
+	PERMISSION_MANAGE_ALERTS                    = "manage:alerts"
 )
 
 // API version constants
@@ -79,22 +79,11 @@ const (
 	NEWS_CATEGORY_POLITICS        = "Politics"
 )
 
-// Broker type constants
+// Capital service provider status (ECMA-style)
 const (
-	BROKER_TYPE_FULL_SERVICE = "Full Service"
-	BROKER_TYPE_DISCOUNT     = "Discount"
-)
-
-// Broker client type constants
-const (
-	BROKER_CLIENT_RETAIL        = "Retail"
-	BROKER_CLIENT_INSTITUTIONAL = "Institutional"
-	BROKER_CLIENT_BOTH          = "Both"
-)
-
-// Broker license status constants
-const (
-	BROKER_LICENSE_ACTIVE   = "Active"
-	BROKER_LICENSE_INACTIVE = "Inactive"
-	BROKER_LICENSE_PENDING  = "Pending"
+	CSP_STATUS_ACTIVE    = "Active"
+	CSP_STATUS_SUSPENDED = "Suspended"
+	CSP_STATUS_REVOKED   = "Revoked"
+	CSP_STATUS_PENDING   = "Pending"
+	CSP_STATUS_INACTIVE  = "Inactive"
 )

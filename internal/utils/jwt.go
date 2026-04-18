@@ -9,16 +9,16 @@ import (
 )
 
 type Claims struct {
-	UserID   string `json:"user_id"`
-	Email    string `json:"email"`
-	Role     string `json:"role"`
+	UserID string `json:"user_id"`
+	Email  string `json:"email"`
+	Role   string `json:"role"`
 	jwt.RegisteredClaims
 }
 
 // GenerateToken generates a JWT token for a user
 func GenerateToken(userID, email, role string) (string, error) {
 	expirationTime := time.Now().Add(time.Hour * time.Duration(config.JWT_EXPIRATION_HOURS))
-	
+
 	claims := &Claims{
 		UserID: userID,
 		Email:  email,

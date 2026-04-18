@@ -51,7 +51,7 @@ func LoadConfig() error {
 		MongoDBURL:    getEnv("MONGODB_URL", "mongodb://localhost:27017"),
 		MongoDBDBName: getEnv("MONGODB_DB_NAME", "ethiopian_financial_news"),
 
-		JWTSecret:  getEnv("JWT_SECRET", "change-me-in-production"),
+		JWTSecret:   getEnv("JWT_SECRET", "change-me-in-production"),
 		Environment: getEnv("ENVIRONMENT", "development"),
 	}
 

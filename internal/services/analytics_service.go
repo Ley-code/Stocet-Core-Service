@@ -16,32 +16,32 @@ func NewAnalyticsService(marketDataService *MarketDataService) *AnalyticsService
 }
 
 type DashboardMetrics struct {
-	TotalUsers      int64   `json:"total_users"`
-	ActiveAlerts    int64   `json:"active_alerts"`
-	TotalBrokers    int64   `json:"total_brokers"`
-	TotalCourses    int64   `json:"total_courses"`
-	MarketSummary   MarketSummary `json:"market_summary"`
+	TotalUsers                   int64         `json:"total_users"`
+	ActiveAlerts                 int64         `json:"active_alerts"`
+	TotalCapitalServiceProviders int64         `json:"total_capital_service_providers"`
+	TotalCourses                 int64         `json:"total_courses"`
+	MarketSummary                MarketSummary `json:"market_summary"`
 }
 
 type MarketSummary struct {
-	TotalTickers    int     `json:"total_tickers"`
-	TopGainers      []TopMover `json:"top_gainers"`
-	TopLosers       []TopMover `json:"top_losers"`
-	AverageChange   float64 `json:"average_change"`
+	TotalTickers  int        `json:"total_tickers"`
+	TopGainers    []TopMover `json:"top_gainers"`
+	TopLosers     []TopMover `json:"top_losers"`
+	AverageChange float64    `json:"average_change"`
 }
 
 type TopMover struct {
-	Ticker       string  `json:"ticker"`
-	Price        float64 `json:"price"`
+	Ticker        string  `json:"ticker"`
+	Price         float64 `json:"price"`
 	PercentChange float64 `json:"percent_change"`
 }
 
 func (s *AnalyticsService) GetDashboardMetrics() (*DashboardMetrics, error) {
-	var totalUsers, activeAlerts, totalBrokers, totalCourses int64
+	var totalUsers, activeAlerts, totalCapitalServiceProviders, totalCourses int64
 
 	database.DB.Model(&models.User{}).Count(&totalUsers)
 	database.DB.Model(&models.Alert{}).Where("status = ?", "active").Count(&activeAlerts)
-	database.DB.Model(&models.Broker{}).Count(&totalBrokers)
+	database.DB.Model(&models.CapitalServiceProvider{}).Count(&totalCapitalServiceProviders)
 	database.DB.Model(&models.Course{}).Count(&totalCourses)
 
 	// Get market summary
@@ -55,7 +55,7 @@ func (s *AnalyticsService) GetDashboardMetrics() (*DashboardMetrics, error) {
 	return &DashboardMetrics{
 		TotalUsers:    totalUsers,
 		ActiveAlerts:  activeAlerts,
-		TotalBrokers:  totalBrokers,
+		TotalCapitalServiceProviders: totalCapitalServiceProviders,
 		TotalCourses:  totalCourses,
 		MarketSummary: marketSummary,
 	}, nil
@@ -132,11 +132,11 @@ func (s *AnalyticsService) GetUserActivity(userID string, days int) (map[string]
 	database.DB.Model(&models.Message{}).Where("user_id = ? AND created_at >= ?", userID, startDate).Count(&messagesSent)
 
 	return map[string]interface{}{
-		"user_id":           userID,
-		"period_days":       days,
-		"alerts_created":    alertsCreated,
-		"quiz_submissions":  quizSubmissions,
-		"messages_sent":     messagesSent,
+		"user_id":          userID,
+		"period_days":      days,
+		"alerts_created":   alertsCreated,
+		"quiz_submissions": quizSubmissions,
+		"messages_sent":    messagesSent,
 	}, nil
 }
 
@@ -149,7 +149,7 @@ func (s *AnalyticsService) GetPlatformHealth() (map[string]interface{}, error) {
 	}
 
 	return map[string]interface{}{
-		"database": dbStatus,
+		"database":  dbStatus,
 		"timestamp": time.Now(),
 	}, nil
 }

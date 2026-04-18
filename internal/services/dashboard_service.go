@@ -6,26 +6,26 @@ import (
 )
 
 type DashboardService struct {
-	newsService      *NewsService
+	newsService       *NewsService
 	marketDataService *MarketDataService
-	alertsService    *AlertsService
+	alertsService     *AlertsService
 }
 
 func NewDashboardService(newsService *NewsService, marketDataService *MarketDataService, alertsService *AlertsService) *DashboardService {
 	return &DashboardService{
-		newsService:      newsService,
+		newsService:       newsService,
 		marketDataService: marketDataService,
-		alertsService:    alertsService,
+		alertsService:     alertsService,
 	}
 }
 
 type DashboardData struct {
-	MarketSummary  MarketSummaryData `json:"market_summary"`
-	TopGainers     []TopMoverData    `json:"top_gainers"`
-	TopLosers      []TopMoverData    `json:"top_losers"`
-	RecentNews     []repositories.NewsArticle `json:"recent_news"`
-	UserAlerts     []models.Alert    `json:"user_alerts"`
-	AlertsSummary  AlertsSummary     `json:"alerts_summary"`
+	MarketSummary MarketSummaryData          `json:"market_summary"`
+	TopGainers    []TopMoverData             `json:"top_gainers"`
+	TopLosers     []TopMoverData             `json:"top_losers"`
+	RecentNews    []repositories.NewsArticle `json:"recent_news"`
+	UserAlerts    []models.Alert             `json:"user_alerts"`
+	AlertsSummary AlertsSummary              `json:"alerts_summary"`
 }
 
 type MarketSummaryData struct {
@@ -40,8 +40,8 @@ type TopMoverData struct {
 }
 
 type AlertsSummary struct {
-	Total    int `json:"total"`
-	Active   int `json:"active"`
+	Total     int `json:"total"`
+	Active    int `json:"active"`
 	Triggered int `json:"triggered"`
 }
 

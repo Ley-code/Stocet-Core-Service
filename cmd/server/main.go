@@ -51,7 +51,7 @@ func SetupRouter() *gin.Engine {
 
 	// Initialize repositories
 	userRepo := repositories.NewUserRepository()
-	brokersRepo := repositories.NewBrokersRepository()
+	cspRepo := repositories.NewCapitalServiceProvidersRepository()
 	educationRepo := repositories.NewEducationRepository()
 	chatRepo := repositories.NewChatRepository()
 	alertsRepo := repositories.NewAlertsRepository()
@@ -61,7 +61,7 @@ func SetupRouter() *gin.Engine {
 
 	// Initialize services
 	authService := services.NewAuthService(userRepo)
-	brokersService := services.NewBrokersService(brokersRepo)
+	cspService := services.NewCapitalServiceProvidersService(cspRepo)
 	educationService := services.NewEducationService(educationRepo)
 	chatService := services.NewChatService(chatRepo)
 	alertsService := services.NewAlertsService(alertsRepo)
@@ -73,7 +73,7 @@ func SetupRouter() *gin.Engine {
 
 	// Initialize controllers
 	authController := controllers.NewAuthController(authService, userRepo)
-	brokersController := controllers.NewBrokersController(brokersService)
+	cspController := controllers.NewCapitalServiceProvidersController(cspService)
 	educationController := controllers.NewEducationController(educationService)
 	chatController := controllers.NewChatController(chatService)
 	alertsController := controllers.NewAlertsController(alertsService)
@@ -91,6 +91,7 @@ func SetupRouter() *gin.Engine {
 
 	router := gin.New()
 	router.Use(middleware.LoggingMiddleware())
+	// router.Use(middleware.CORSMiddleware())
 	router.Use(gin.Recovery())
 
 	// Health check
@@ -104,7 +105,7 @@ func SetupRouter() *gin.Engine {
 		routes.SetupAuthRoutes(api, authController)
 		routes.SetupNewsRoutes(api, newsController)
 		routes.SetupMarketDataRoutes(api, marketDataController)
-		routes.SetupBrokersRoutes(api, brokersController)
+		routes.SetupCapitalServiceProviderRoutes(api, cspController)
 		routes.SetupEducationRoutes(api, educationController)
 		routes.SetupChatRoutes(api, chatController)
 		routes.SetupAlertsRoutes(api, alertsController)

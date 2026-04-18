@@ -73,4 +73,3 @@ func (c *AuthController) DeleteAccount(ctx *gin.Context) {
 
 	utils.SuccessResponse(ctx, 200, nil, "Account deleted successfully")
 }
-

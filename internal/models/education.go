@@ -4,8 +4,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"gorm.io/gorm"
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
 )
 
 type Course struct {
