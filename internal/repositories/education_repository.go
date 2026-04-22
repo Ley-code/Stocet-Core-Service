@@ -33,7 +33,7 @@ func (r *EducationRepository) ListCourses(limit, offset int) ([]models.Course, i
 		return nil, 0, err
 	}
 
-	err := database.DB.Preload("Lessons").Limit(limit).Offset(offset).Find(&courses).Error
+	err := database.DB.Preload("Lessons.Quiz.Questions").Limit(limit).Offset(offset).Find(&courses).Error
 	return courses, total, err
 }
 
