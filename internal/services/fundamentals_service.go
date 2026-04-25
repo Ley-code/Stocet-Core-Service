@@ -564,6 +564,15 @@ func (s *FundamentalsService) GetPublicScorecard(ticker string) (*PublicScorecar
 	if le, err := s.repo.GetLatestEPSByTicker(ticker); err == nil {
 		latest = le
 	}
+	if board == nil {
+		board = make([]models.BoardMember, 0)
+	}
+	if reports == nil {
+		reports = make([]models.FinancialReport, 0)
+	}
+	if news == nil {
+		news = make([]models.CorporateNews, 0)
+	}
 	return &PublicScorecard{
 		Profile:          profile,
 		BoardMembers:     board,

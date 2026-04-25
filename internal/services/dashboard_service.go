@@ -29,14 +29,17 @@ type DashboardData struct {
 }
 
 type MarketSummaryData struct {
-	TotalTickers  int     `json:"total_tickers"`
-	AverageChange float64 `json:"average_change"`
+	TotalTickers     int     `json:"total_tickers"`
+	AverageChange    float64 `json:"average_change"`
+	AverageVariation float64 `json:"average_variation"` // equal-weight average absolute price move (ETB)
+	ESXIndexLevel    float64 `json:"esx_index_level"`   // equal-weight average of last prices (synthetic index)
 }
 
 type TopMoverData struct {
 	Ticker        string  `json:"ticker"`
 	Price         float64 `json:"price"`
 	PercentChange float64 `json:"percent_change"`
+	Variation     float64 `json:"variation"`
 }
 
 type AlertsSummary struct {
@@ -71,6 +74,13 @@ func (s *DashboardService) GetDashboardData(userID string) (*DashboardData, erro
 
 	alertsSummary := s.buildAlertsSummary(userAlerts)
 
+	if recentNews == nil {
+		recentNews = make([]repositories.NewsArticle, 0)
+	}
+	if userAlerts == nil {
+		userAlerts = make([]models.Alert, 0)
+	}
+
 	return &DashboardData{
 		MarketSummary: marketSummary,
 		TopGainers:    topGainers,
@@ -86,14 +96,18 @@ func (s *DashboardService) buildMarketSummary(prices []repositories.MarketPrice)
 		return MarketSummaryData{}
 	}
 
-	totalChange := 0.0
+	var sumPct, sumPrice, sumVar float64
 	for _, price := range prices {
-		totalChange += price.PercentChange
+		sumPct += price.PercentChange
+		sumPrice += price.Price
+		sumVar += price.Variation
 	}
-
+	n := float64(len(prices))
 	return MarketSummaryData{
-		TotalTickers:  len(prices),
-		AverageChange: totalChange / float64(len(prices)),
+		TotalTickers:     len(prices),
+		AverageChange:    sumPct / n,
+		AverageVariation: sumVar / n,
+		ESXIndexLevel:    sumPrice / n,
 	}
 }
 
@@ -106,6 +120,7 @@ func (s *DashboardService) getTopMovers(prices []repositories.MarketPrice) ([]To
 			Ticker:        price.TickerSymbol,
 			Price:         price.Price,
 			PercentChange: price.PercentChange,
+			Variation:     price.Variation,
 		}
 
 		if price.PercentChange > 0 {

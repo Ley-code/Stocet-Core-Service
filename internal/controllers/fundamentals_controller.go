@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net/http"
 
+	"stocet-core-service/internal/models"
 	"stocet-core-service/internal/services"
 	"stocet-core-service/internal/utils"
 
@@ -132,6 +133,9 @@ func (ctrl *FundamentalsController) ListBoardMembers(c *gin.Context) {
 	if handleFundamentalsError(c, err) {
 		return
 	}
+	if members == nil {
+		members = make([]models.BoardMember, 0)
+	}
 	utils.SuccessResponse(c, http.StatusOK, gin.H{"board_members": members}, "")
 }
 
@@ -232,6 +236,9 @@ func (ctrl *FundamentalsController) ListCorporateNews(c *gin.Context) {
 	items, total, err := ctrl.svc.ListCorporateNews(companyID, limit, offset)
 	if handleFundamentalsError(c, err) {
 		return
+	}
+	if items == nil {
+		items = make([]models.CorporateNews, 0)
 	}
 	utils.SuccessResponse(c, http.StatusOK, gin.H{
 		"corporate_news": items,

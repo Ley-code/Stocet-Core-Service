@@ -3,6 +3,7 @@ package models
 import (
 	"time"
 
+	"github.com/lib/pq"
 	"gorm.io/gorm"
 )
 
@@ -13,7 +14,7 @@ type CapitalServiceProvider struct {
 	Category         string         `gorm:"not null" json:"category"`
 	Status           string         `gorm:"default:Active" json:"status"`
 	RegistrationDate time.Time      `json:"registration_date"`
-	Services         []string       `gorm:"type:text[]" json:"services"`
+	Services         pq.StringArray `gorm:"type:text[]" json:"services"`
 	PaidUpCapital    float64        `json:"paid_up_capital"`
 	ChiefExecutive   string         `json:"chief_executive"`
 	Phone            string         `json:"phone"`
