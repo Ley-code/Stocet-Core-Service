@@ -96,7 +96,7 @@ func SetupRouter() *gin.Engine {
 
 	router := gin.New()
 	router.Use(middleware.LoggingMiddleware())
-	router.Use(middleware.CORSMiddleware())
+	// router.Use(middleware.CORSMiddleware())
 	router.Use(gin.Recovery())
 
 	// Health check
