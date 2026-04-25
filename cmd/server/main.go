@@ -62,6 +62,7 @@ func SetupRouter() *gin.Engine {
 	newsRepo := repositories.NewNewsRepository(database.MongoDBClient)
 	marketDataRepo := repositories.NewMarketDataRepository(database.DB)
 	watchlistRepo := repositories.NewWatchlistRepository()
+	fundamentalsRepo := repositories.NewFundamentalAnalysisRepository()
 
 	// Initialize services
 	authService := services.NewAuthService(userRepo, verificationCodeRepo, emailSender)
@@ -75,6 +76,7 @@ func SetupRouter() *gin.Engine {
 	analyticsService := services.NewAnalyticsService(marketDataService)
 	dashboardService := services.NewDashboardService(newsService, marketDataService, alertsService)
 	watchlistService := services.NewWatchlistService(watchlistRepo)
+	fundamentalsService := services.NewFundamentalsService(fundamentalsRepo)
 
 	// Initialize controllers
 	authController := controllers.NewAuthController(authService, userRepo)
@@ -88,6 +90,7 @@ func SetupRouter() *gin.Engine {
 	analyticsController := controllers.NewAnalyticsController(analyticsService)
 	dashboardController := controllers.NewDashboardController(dashboardService)
 	adminController := controllers.NewAdminController(userRepo)
+	fundamentalsController := controllers.NewFundamentalsController(fundamentalsService)
 	watchlistController := controllers.NewWatchlistController(watchlistService)
 
 	// Setup Gin router
@@ -118,7 +121,8 @@ func SetupRouter() *gin.Engine {
 		routes.SetupNotificationsRoutes(api, notificationsController)
 		routes.SetupAnalyticsRoutes(api, analyticsController)
 		routes.SetupDashboardRoutes(api, dashboardController)
-		routes.SetupAdminRoutes(api, adminController)
+		routes.SetupAdminRoutes(api, adminController, fundamentalsController)
+		routes.SetupFundamentalsPublicRoutes(api, fundamentalsController)
 		routes.SetupWatchlistRoutes(api, watchlistController)
 	}
 
