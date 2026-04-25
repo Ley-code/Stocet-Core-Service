@@ -572,3 +572,26 @@ func (s *FundamentalsService) GetPublicScorecard(ticker string) (*PublicScorecar
 		LatestEPS:        latest,
 	}, nil
 }
+
+// PublicCompanyDirectoryEntry is a minimal ticker → name mapping for market lists.
+type PublicCompanyDirectoryEntry struct {
+	TickerSymbol string `json:"ticker_symbol"`
+	CompanyName  string `json:"company_name"`
+}
+
+// GetPublicCompanyDirectory returns all listed company names for cross-referencing market tickers (read-only, unauthenticated).
+func (s *FundamentalsService) GetPublicCompanyDirectory() ([]PublicCompanyDirectoryEntry, error) {
+	const maxRows = 5000
+	profiles, _, err := s.repo.ListCompanyProfiles(maxRows, 0)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]PublicCompanyDirectoryEntry, 0, len(profiles))
+	for i := range profiles {
+		out = append(out, PublicCompanyDirectoryEntry{
+			TickerSymbol: profiles[i].TickerSymbol,
+			CompanyName:  profiles[i].CompanyName,
+		})
+	}
+	return out, nil
+}

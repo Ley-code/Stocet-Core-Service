@@ -286,3 +286,13 @@ func (ctrl *FundamentalsController) GetPublicScorecard(c *gin.Context) {
 	}
 	utils.SuccessResponse(c, http.StatusOK, sc, "")
 }
+
+// GetPublicCompanyDirectory returns ticker → company_name pairs for market list enrichment.
+func (ctrl *FundamentalsController) GetPublicCompanyDirectory(c *gin.Context) {
+	entries, err := ctrl.svc.GetPublicCompanyDirectory()
+	if err != nil {
+		utils.InternalServerError(c, err, "Failed to load company directory")
+		return
+	}
+	utils.SuccessResponse(c, http.StatusOK, gin.H{"entries": entries}, "")
+}
