@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"fmt"
+	"github.com/sirupsen/logrus"
 	"log"
 	"strings"
 	"time"
@@ -126,7 +127,7 @@ func (r *NotificationsRepository) MatchAndTriggerAlerts() (int, error) {
 	if r.emailSender != nil && r.emailSender.Enabled() {
 		for _, m := range matches {
 			if strings.TrimSpace(m.UserEmail) == "" {
-				log.Printf("Skipping email for alert %s: user email is empty", m.AlertID)
+				logrus.Printf("Skipping email for alert %s: user email is empty", m.AlertID)
 				continue
 			}
 
@@ -137,7 +138,7 @@ func (r *NotificationsRepository) MatchAndTriggerAlerts() (int, error) {
 			)
 
 			if err := r.emailSender.Send(m.UserEmail, subject, body); err != nil {
-				log.Printf("Failed to send email for alert %s to %s: %v", m.AlertID, m.UserEmail, err)
+				logrus.Printf("Failed to send email for alert %s to %s: %v", m.AlertID, m.UserEmail, err)
 			}
 		}
 	}

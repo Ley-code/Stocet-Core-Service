@@ -1,6 +1,8 @@
 @baseUrl = http://localhost:8080/api/v1
-@token = your_user_token_here
+@token = eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VyX2lkIjoiYjU0MzAzNjEtZjI1YS00MzZkLTkwYmYtNGJkNjBlZTBkMmQwIiwiZW1haWwiOiJsZXlrdW5AY2hhcGEuY28iLCJyb2xlIjoidXNlciIsImlzcyI6InN0b2NldC1jb3JlLXNlcnZpY2UiLCJleHAiOjE3NzcyMDkyMTMsImlhdCI6MTc3NzEyMjgxM30.KZmvYbxlfXfcQf_0uX8twu5kTqyK8q_RCTe21R1RK1I
 @adminToken = your_admin_token_here
+@alertUserEmail = leykun@chapa.co
+@alertUserPassword = abcd1234
 
 ### Health Check
 GET {{baseUrl}}/health
@@ -12,8 +14,8 @@ POST {{baseUrl}}/auth/login
 Content-Type: application/json
 
 {
-    "email": "user@example.com",
-    "password": "password123"
+    "email": "{{alertUserEmail}}",
+    "password": "{{alertUserPassword}}"
 }
 
 ### signup
@@ -185,14 +187,17 @@ GET {{baseUrl}}/alerts
 Authorization: Bearer {{token}}
 
 ### create alert
+# IMPORTANT:
+# Use a token generated from this same API/database.
+# Stale token user_id will fail with fk_alerts_user.
 POST {{baseUrl}}/alerts
-Authorization: Bearer {{token}}
+Authorization: Bearer {{login.response.body.$.data.token}}
 Content-Type: application/json
 
 {
-    "ticker": "AAPL",
-    "condition": "above",
-    "value": 200
+    "ticker": "IBMM",
+    "condition": "below",
+    "threshold": 1000
 }
 
 ### update alert
@@ -207,6 +212,9 @@ Content-Type: application/json
 ### delete alert
 DELETE {{baseUrl}}/alerts/1
 Authorization: Bearer {{token}}
+
+### trigger matched alerts (internal)
+POST {{baseUrl}}/internal/trigger-alerts
 
 
 ### --- ANALYTICS ---

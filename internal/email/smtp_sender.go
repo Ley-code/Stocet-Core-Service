@@ -69,7 +69,14 @@ func (s *SMTPSender) Send(to string, subject string, body string) error {
 	}
 
 	addr := net.JoinHostPort(s.host, s.port)
-	conn, err := net.DialTimeout("tcp", addr, s.timeout)
+	var conn net.Conn
+	var err error
+
+	if s.port == "465" {
+		conn, err = tls.DialWithDialer(&net.Dialer{Timeout: s.timeout}, "tcp", addr, &tls.Config{ServerName: s.host})
+	} else {
+		conn, err = net.DialTimeout("tcp", addr, s.timeout)
+	}
 	if err != nil {
 		return fmt.Errorf("smtp dial failed: %w", err)
 	}
@@ -83,13 +90,15 @@ func (s *SMTPSender) Send(to string, subject string, body string) error {
 	}
 	defer client.Close()
 
-	if ok, _ := client.Extension("STARTTLS"); ok {
-		tlsCfg := &tls.Config{
-			ServerName: s.host,
-			MinVersion: tls.VersionTLS12,
-		}
-		if err := client.StartTLS(tlsCfg); err != nil {
-			return fmt.Errorf("smtp starttls failed: %w", err)
+	if s.port != "465" {
+		if ok, _ := client.Extension("STARTTLS"); ok {
+			tlsCfg := &tls.Config{
+				ServerName: s.host,
+				MinVersion: tls.VersionTLS12,
+			}
+			if err := client.StartTLS(tlsCfg); err != nil {
+				return fmt.Errorf("smtp starttls failed: %w", err)
+			}
 		}
 	}
 
