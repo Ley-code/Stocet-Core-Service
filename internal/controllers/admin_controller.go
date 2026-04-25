@@ -1,7 +1,6 @@
 package controllers
 
 import (
-	"stocet-core-service/internal/models"
 	"stocet-core-service/internal/repositories"
 	"stocet-core-service/internal/utils"
 
@@ -36,20 +35,31 @@ func (c *AdminController) ListUsers(ctx *gin.Context) {
 func (c *AdminController) UpdateUser(ctx *gin.Context) {
 	id := ctx.Param("id")
 
-	var user models.User
-	if err := ctx.ShouldBindJSON(&user); err != nil {
+	var updateData map[string]interface{}
+	if err := ctx.ShouldBindJSON(&updateData); err != nil {
 		utils.BadRequest(ctx, "Invalid request body")
 		return
 	}
 
-	user.ID = id
+	// Prevent updating sensitive fields
+	delete(updateData, "id")
+	delete(updateData, "password_hash")
+	delete(updateData, "created_at")
+	delete(updateData, "updated_at")
+	delete(updateData, "deleted_at")
 
-	if err := c.userRepo.Update(&user); err != nil {
+	if err := c.userRepo.UpdateFields(id, updateData); err != nil {
 		utils.InternalServerError(ctx, err, "Failed to update user")
 		return
 	}
 
-	utils.SuccessResponse(ctx, 200, user, "User updated successfully")
+	updatedUser, err := c.userRepo.GetByID(id)
+	if err != nil {
+		utils.InternalServerError(ctx, err, "Failed to retrieve updated user")
+		return
+	}
+
+	utils.SuccessResponse(ctx, 200, updatedUser, "User updated successfully")
 }
 
 func (c *AdminController) DeleteUser(ctx *gin.Context) {

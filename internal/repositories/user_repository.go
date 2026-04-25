@@ -37,6 +37,10 @@ func (r *UserRepository) Update(user *models.User) error {
 	return database.DB.Save(user).Error
 }
 
+func (r *UserRepository) UpdateFields(id string, data map[string]interface{}) error {
+	return database.DB.Model(&models.User{}).Where("id = ?", id).Updates(data).Error
+}
+
 func (r *UserRepository) Delete(id string) error {
 	return database.DB.Delete(&models.User{}, "id = ?", id).Error
 }
