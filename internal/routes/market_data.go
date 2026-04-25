@@ -16,4 +16,9 @@ func SetupMarketDataRoutes(router *gin.RouterGroup, controller *controllers.Mark
 		market.GET("/:ticker/history", controller.GetPriceHistory)
 		market.GET("/:ticker/indicators", controller.GetTechnicalIndicators)
 	}
+
+	candles := router.Group("/market", middleware.AuthMiddleware())
+	{
+		candles.GET("/candles/:ticker", controller.GetCandles)
+	}
 }

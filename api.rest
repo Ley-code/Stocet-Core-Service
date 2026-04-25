@@ -71,6 +71,10 @@ Authorization: Bearer {{token}}
 GET {{baseUrl}}/market-prices/AAPL/indicators
 Authorization: Bearer {{token}}
 
+### get candles
+GET {{baseUrl}}/market/candles/AAPL?resolution=1h&start_date=2026-01-01&end_date=2026-01-31&fill_gaps=true
+Authorization: Bearer {{token}}
+
 
 ### --- CAPITAL SERVICE PROVIDERS ---
 

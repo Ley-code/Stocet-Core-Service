@@ -59,7 +59,7 @@ func SetupRouter() *gin.Engine {
 	emailSender := email.NewSMTPSender(config.AppConfig)
 	notificationsRepo := repositories.NewNotificationsRepository(emailSender)
 	newsRepo := repositories.NewNewsRepository(database.MongoDBClient)
-	marketDataRepo := repositories.NewMarketDataRepository(database.MongoDBClient)
+	marketDataRepo := repositories.NewMarketDataRepository(database.DB)
 	watchlistRepo := repositories.NewWatchlistRepository()
 
 	// Initialize services
@@ -96,7 +96,7 @@ func SetupRouter() *gin.Engine {
 
 	router := gin.New()
 	router.Use(middleware.LoggingMiddleware())
-	// router.Use(middleware.CORSMiddleware())
+	router.Use(middleware.CORSMiddleware())
 	router.Use(gin.Recovery())
 
 	// Health check

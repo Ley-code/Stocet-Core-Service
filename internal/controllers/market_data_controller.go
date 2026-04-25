@@ -3,6 +3,7 @@ package controllers
 import (
 	"stocet-core-service/internal/services"
 	"stocet-core-service/internal/utils"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -112,4 +113,57 @@ func (c *MarketDataController) GetTechnicalIndicators(ctx *gin.Context) {
 	}
 
 	utils.SuccessResponse(ctx, 200, indicators, "")
+}
+
+func (c *MarketDataController) GetCandles(ctx *gin.Context) {
+	ticker := ctx.Param("ticker")
+	startDateStr := ctx.Query("start_date")
+	endDateStr := ctx.Query("end_date")
+	resolution := strings.TrimSpace(ctx.DefaultQuery("resolution", "1h"))
+	fillGapsRaw := strings.ToLower(strings.TrimSpace(ctx.DefaultQuery("fill_gaps", "true")))
+
+	if startDateStr == "" || endDateStr == "" {
+		utils.BadRequest(ctx, "start_date and end_date are required")
+		return
+	}
+
+	startDate, err := utils.ParseDate(startDateStr)
+	if err != nil {
+		utils.BadRequest(ctx, "Invalid start_date format. Use YYYY-MM-DD or RFC3339 format")
+		return
+	}
+
+	endDate, err := utils.ParseDate(endDateStr)
+	if err != nil {
+		utils.BadRequest(ctx, "Invalid end_date format. Use YYYY-MM-DD or RFC3339 format")
+		return
+	}
+
+	if len(endDateStr) == 10 {
+		endDate = time.Date(endDate.Year(), endDate.Month(), endDate.Day(), 23, 59, 59, 999999999, time.UTC)
+	}
+
+	if startDate.After(endDate) {
+		utils.BadRequest(ctx, "start_date must be before end_date")
+		return
+	}
+
+	fillGaps := fillGapsRaw != "false" && fillGapsRaw != "0"
+	candles, err := c.service.GetCandles(ticker, resolution, startDate, endDate, fillGaps)
+	if err != nil {
+		if strings.Contains(err.Error(), "unsupported resolution") {
+			utils.BadRequest(ctx, "resolution must be one of: 1m, 5m, 1h, 1d")
+			return
+		}
+		utils.InternalServerError(ctx, err, "Failed to fetch candle data")
+		return
+	}
+
+	utils.SuccessResponse(ctx, 200, gin.H{
+		"ticker_symbol": ticker,
+		"resolution":    resolution,
+		"fill_gaps":     fillGaps,
+		"candles":       candles,
+		"total":         len(candles),
+	}, "")
 }

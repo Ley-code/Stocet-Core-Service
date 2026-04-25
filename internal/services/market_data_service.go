@@ -29,6 +29,10 @@ func (s *MarketDataService) GetByTickerAndDateRange(ticker string, startDate, en
 	return s.repo.GetByTickerAndDateRange(ticker, startDate, endDate)
 }
 
+func (s *MarketDataService) GetCandles(ticker, resolution string, startDate, endDate time.Time, fillGaps bool) ([]repositories.Candle, error) {
+	return s.repo.GetCandles(ticker, resolution, startDate, endDate, fillGaps)
+}
+
 func (s *MarketDataService) ComputeTechnicalIndicators(ticker string, periodDays int) (map[string]interface{}, error) {
 	endDate := time.Now()
 	startDate := endDate.AddDate(0, 0, -periodDays)
