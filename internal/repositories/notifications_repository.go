@@ -3,18 +3,22 @@ package repositories
 import (
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 
 	"stocet-core-service/internal/database"
+	"stocet-core-service/internal/email"
 	"stocet-core-service/internal/models"
 )
 
-type NotificationsRepository struct{}
+type NotificationsRepository struct {
+	emailSender email.Sender
+}
 
-func NewNotificationsRepository() *NotificationsRepository {
-	return &NotificationsRepository{}
+func NewNotificationsRepository(emailSender email.Sender) *NotificationsRepository {
+	return &NotificationsRepository{emailSender: emailSender}
 }
 
 // MatchAndTriggerAlerts finds active alerts whose conditions are met by the
@@ -30,6 +34,7 @@ func (r *NotificationsRepository) MatchAndTriggerAlerts() (int, error) {
 	type matchedAlert struct {
 		AlertID   string  `gorm:"column:alert_id"`
 		UserID    string  `gorm:"column:user_id"`
+		UserEmail string  `gorm:"column:user_email"`
 		Ticker    string  `gorm:"column:ticker"`
 		Condition string  `gorm:"column:condition"`
 		Threshold float64 `gorm:"column:threshold"`
@@ -40,11 +45,13 @@ func (r *NotificationsRepository) MatchAndTriggerAlerts() (int, error) {
 	err := tx.Raw(`
 		SELECT a.id AS alert_id,
 		       a.user_id,
+		       u.email AS user_email,
 		       a.ticker,
 		       a.condition,
 		       a.threshold,
 		       lp.price
 		FROM alerts a
+		JOIN users u ON u.id = a.user_id
 		JOIN LATERAL (
 			SELECT mp.price
 			FROM market_prices mp
@@ -113,6 +120,26 @@ func (r *NotificationsRepository) MatchAndTriggerAlerts() (int, error) {
 
 	if err := tx.Commit().Error; err != nil {
 		return 0, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	// Step 4: Send email notifications (best effort, does not affect DB results).
+	if r.emailSender != nil && r.emailSender.Enabled() {
+		for _, m := range matches {
+			if strings.TrimSpace(m.UserEmail) == "" {
+				log.Printf("Skipping email for alert %s: user email is empty", m.AlertID)
+				continue
+			}
+
+			subject := fmt.Sprintf("Price Alert: %s", m.Ticker)
+			body := fmt.Sprintf(
+				"Your alert has been triggered.\n\n%s has reached %.2f ETB (your target: %s %.2f ETB).\n\nPlease open Stocet to review details.",
+				m.Ticker, m.Price, m.Condition, m.Threshold,
+			)
+
+			if err := r.emailSender.Send(m.UserEmail, subject, body); err != nil {
+				log.Printf("Failed to send email for alert %s to %s: %v", m.AlertID, m.UserEmail, err)
+			}
+		}
 	}
 
 	return len(matches), nil

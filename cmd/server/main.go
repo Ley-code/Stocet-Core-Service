@@ -7,6 +7,7 @@ import (
 	"stocet-core-service/internal/config"
 	"stocet-core-service/internal/controllers"
 	"stocet-core-service/internal/database"
+	"stocet-core-service/internal/email"
 	"stocet-core-service/internal/middleware"
 	"stocet-core-service/internal/repositories"
 	"stocet-core-service/internal/routes"
@@ -55,7 +56,8 @@ func SetupRouter() *gin.Engine {
 	educationRepo := repositories.NewEducationRepository()
 	chatRepo := repositories.NewChatRepository()
 	alertsRepo := repositories.NewAlertsRepository()
-	notificationsRepo := repositories.NewNotificationsRepository()
+	emailSender := email.NewSMTPSender(config.AppConfig)
+	notificationsRepo := repositories.NewNotificationsRepository(emailSender)
 	newsRepo := repositories.NewNewsRepository(database.MongoDBClient)
 	marketDataRepo := repositories.NewMarketDataRepository(database.MongoDBClient)
 	watchlistRepo := repositories.NewWatchlistRepository()

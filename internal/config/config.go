@@ -29,6 +29,13 @@ type Config struct {
 
 	// Environment
 	Environment string
+
+	// Email (SMTP)
+	SMTPHost     string
+	SMTPPort     string
+	SMTPUsername string
+	SMTPPassword string
+	SMTPFrom     string
 }
 
 var AppConfig *Config
@@ -53,6 +60,12 @@ func LoadConfig() error {
 
 		JWTSecret:   getEnv("JWT_SECRET", "change-me-in-production"),
 		Environment: getEnv("ENVIRONMENT", "development"),
+
+		SMTPHost:     getEnv("SMTP_HOST", ""),
+		SMTPPort:     getEnv("SMTP_PORT", ""),
+		SMTPUsername: getEnv("SMTP_USERNAME", ""),
+		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
+		SMTPFrom:     getEnv("SMTP_FROM", ""),
 	}
 
 	if AppConfig.JWTSecret == "change-me-in-production" && AppConfig.Environment == "production" {

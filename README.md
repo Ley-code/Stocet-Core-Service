@@ -113,6 +113,7 @@ See `.env.example` for all available configuration options:
 - `MONGODB_DB_NAME`: MongoDB database name
 - `JWT_SECRET`: Secret key for JWT tokens (required in production)
 - `ENVIRONMENT`: Environment (development/production)
+- `SMTP_HOST`, `SMTP_PORT`, `SMTP_USERNAME`, `SMTP_PASSWORD`, `SMTP_FROM`: Optional SMTP settings for email alerts
 
 ## API Endpoints
 
