@@ -27,7 +27,7 @@ type Message struct {
 	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
 
 	// For display purposes (joined data)
-	UserEmail string `gorm:"-" json:"user_email,omitempty"`
+	UserName string `gorm:"-" json:"user_name,omitempty"`
 }
 
 // TableName methods

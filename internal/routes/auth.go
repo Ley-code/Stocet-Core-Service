@@ -12,6 +12,7 @@ func SetupAuthRoutes(router *gin.RouterGroup, controller *controllers.AuthContro
 	{
 		auth.POST("/login", controller.Login)
 		auth.POST("/signup", controller.Signup)
+		auth.POST("/verify-email", controller.VerifyEmail)
 		auth.GET("/me", middleware.AuthMiddleware(), controller.GetMe)
 		auth.DELETE("/me", middleware.AuthMiddleware(), controller.DeleteAccount)
 	}

@@ -1,21 +1,41 @@
 package services
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"fmt"
+	"math/big"
+	"strings"
+	"time"
+
 	"stocet-core-service/internal/config"
+	"stocet-core-service/internal/email"
 	"stocet-core-service/internal/models"
 	"stocet-core-service/internal/repositories"
 	"stocet-core-service/internal/utils"
 
 	"github.com/google/uuid"
+	"gorm.io/gorm"
 )
 
 type AuthService struct {
-	userRepo *repositories.UserRepository
+	userRepo             *repositories.UserRepository
+	verificationCodeRepo *repositories.VerificationCodeRepository
+	mailer               email.Sender
 }
 
-func NewAuthService(userRepo *repositories.UserRepository) *AuthService {
-	return &AuthService{userRepo: userRepo}
+func NewAuthService(
+	userRepo *repositories.UserRepository,
+	verificationCodeRepo *repositories.VerificationCodeRepository,
+	mailer email.Sender,
+) *AuthService {
+	return &AuthService{
+		userRepo:             userRepo,
+		verificationCodeRepo: verificationCodeRepo,
+		mailer:               mailer,
+	}
 }
 
 type LoginRequest struct {
@@ -24,8 +44,10 @@ type LoginRequest struct {
 }
 
 type SignupRequest struct {
-	Email    string `json:"email" binding:"required"`
-	Password string `json:"password" binding:"required"`
+	Email       string `json:"email" binding:"required"`
+	Password    string `json:"password" binding:"required"`
+	FullName    string `json:"full_name" binding:"required"`
+	PhoneNumber string `json:"phone_number" binding:"required"`
 }
 
 type AuthResponse struct {
@@ -33,16 +55,37 @@ type AuthResponse struct {
 	User  *models.User `json:"user"`
 }
 
+type SignupResponse struct {
+	Email                string `json:"email"`
+	RequiresVerification bool   `json:"requires_verification"`
+}
+
+type VerifyEmailRequest struct {
+	Email string `json:"email" binding:"required"`
+	Code  string `json:"code" binding:"required"`
+}
+
+type VerifyEmailResponse struct {
+	Email      string `json:"email"`
+	IsVerified bool   `json:"is_verified"`
+}
+
 func (s *AuthService) Login(req LoginRequest) (*AuthResponse, error) {
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+
 	// Validate email
-	if !utils.ValidateEmail(req.Email) {
+	if !utils.ValidateEmail(email) {
 		return nil, errors.New("invalid email format")
 	}
 
 	// Get user by email
-	user, err := s.userRepo.GetByEmail(req.Email)
+	user, err := s.userRepo.GetByEmail(email)
 	if err != nil {
 		return nil, errors.New("invalid credentials")
+	}
+
+	if !user.IsVerified {
+		return nil, errors.New("email is not verified. please verify your email before logging in")
 	}
 
 	// Check password
@@ -62,9 +105,13 @@ func (s *AuthService) Login(req LoginRequest) (*AuthResponse, error) {
 	}, nil
 }
 
-func (s *AuthService) Signup(req SignupRequest) (*AuthResponse, error) {
+func (s *AuthService) Signup(req SignupRequest) (*SignupResponse, error) {
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	fullName := strings.TrimSpace(req.FullName)
+	phoneNumber := strings.TrimSpace(req.PhoneNumber)
+
 	// Validate email
-	if !utils.ValidateEmail(req.Email) {
+	if !utils.ValidateEmail(email) {
 		return nil, errors.New("invalid email format")
 	}
 
@@ -73,10 +120,21 @@ func (s *AuthService) Signup(req SignupRequest) (*AuthResponse, error) {
 		return nil, errors.New("password must be at least 8 characters with at least one letter and one number")
 	}
 
+	if fullName == "" {
+		return nil, errors.New("full_name is required")
+	}
+
+	if phoneNumber == "" {
+		return nil, errors.New("phone_number is required")
+	}
+
 	// Check if user already exists
-	existingUser, _ := s.userRepo.GetByEmail(req.Email)
-	if existingUser != nil {
+	existingUser, err := s.userRepo.GetByEmail(email)
+	if err == nil && existingUser != nil {
 		return nil, errors.New("user with this email already exists")
+	}
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, errors.New("failed to validate existing user")
 	}
 
 	// Hash password
@@ -88,7 +146,10 @@ func (s *AuthService) Signup(req SignupRequest) (*AuthResponse, error) {
 	// Create user
 	user := &models.User{
 		ID:                 uuid.New().String(),
-		Email:              req.Email,
+		Email:              email,
+		FullName:           fullName,
+		PhoneNumber:        phoneNumber,
+		IsVerified:         false,
 		PasswordHash:       hashedPassword,
 		Role:               models.UserRole(config.USER_ROLE),
 		SubscriptionStatus: models.SubscriptionStatus(config.SUBSCRIPTION_FREE),
@@ -98,14 +159,112 @@ func (s *AuthService) Signup(req SignupRequest) (*AuthResponse, error) {
 		return nil, errors.New("failed to create user")
 	}
 
-	// Generate token
-	token, err := utils.GenerateToken(user.ID, user.Email, string(user.Role))
+	code, err := generateVerificationCode()
 	if err != nil {
-		return nil, errors.New("failed to generate token")
+		_ = s.userRepo.Delete(user.ID)
+		return nil, errors.New("failed to generate verification code")
 	}
 
-	return &AuthResponse{
-		Token: token,
-		User:  user,
+	codeHash := hashVerificationCode(code)
+	expiresAt := time.Now().UTC().Add(10 * time.Minute)
+
+	if err := s.verificationCodeRepo.UpsertActiveCode(email, codeHash, expiresAt); err != nil {
+		_ = s.userRepo.Delete(user.ID)
+		return nil, errors.New("failed to store verification code")
+	}
+
+	if err := s.sendVerificationEmail(email, fullName, code); err != nil {
+		_ = s.userRepo.Delete(user.ID)
+		return nil, errors.New("failed to send verification email")
+	}
+
+	return &SignupResponse{
+		Email:                email,
+		RequiresVerification: true,
 	}, nil
+}
+
+func (s *AuthService) VerifyEmail(req VerifyEmailRequest) (*VerifyEmailResponse, error) {
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	code := strings.TrimSpace(req.Code)
+
+	if !utils.ValidateEmail(email) {
+		return nil, errors.New("invalid email format")
+	}
+	if len(code) != 6 {
+		return nil, errors.New("verification code must be 6 digits")
+	}
+
+	verificationCode, err := s.verificationCodeRepo.GetLatestActiveByEmail(email)
+	if err != nil {
+		return nil, errors.New("invalid or expired verification code")
+	}
+
+	if verificationCode.ExpiresAt.Before(time.Now().UTC()) {
+		return nil, errors.New("verification code has expired")
+	}
+
+	if verificationCode.CodeHash != hashVerificationCode(code) {
+		return nil, errors.New("invalid or expired verification code")
+	}
+
+	if err := s.userRepo.SetVerifiedByEmail(email); err != nil {
+		return nil, errors.New("failed to verify email")
+	}
+
+	if err := s.verificationCodeRepo.MarkUsed(verificationCode.ID); err != nil {
+		return nil, errors.New("failed to finalize verification")
+	}
+
+	return &VerifyEmailResponse{
+		Email:      email,
+		IsVerified: true,
+	}, nil
+}
+
+func generateVerificationCode() (string, error) {
+	max := big.NewInt(1000000)
+	n, err := rand.Int(rand.Reader, max)
+	if err != nil {
+		return "", err
+	}
+	return fmt.Sprintf("%06d", n.Int64()), nil
+}
+
+func hashVerificationCode(code string) string {
+	sum := sha256.Sum256([]byte(code))
+	return hex.EncodeToString(sum[:])
+}
+
+func (s *AuthService) sendVerificationEmail(toEmail, fullName, code string) error {
+	if s.mailer == nil || !s.mailer.Enabled() {
+		return errors.New("email delivery is currently unavailable")
+	}
+
+	subject := "Verify your STOCET account"
+	htmlBody := fmt.Sprintf(`
+<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#f6f8fb;font-family:Arial,sans-serif;color:#111827;">
+    <table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;padding:28px;">
+            <tr><td style="font-size:20px;font-weight:700;color:#111827;padding-bottom:8px;">STOCET Account Verification</td></tr>
+            <tr><td style="font-size:14px;color:#374151;padding-bottom:20px;">Hi %s, thanks for signing up. Use the verification code below to activate your account.</td></tr>
+            <tr>
+              <td align="center" style="padding:8px 0 20px 0;">
+                <div style="display:inline-block;font-size:28px;letter-spacing:6px;font-weight:700;padding:12px 20px;border:1px solid #d1d5db;border-radius:8px;background:#f9fafb;">%s</div>
+              </td>
+            </tr>
+            <tr><td style="font-size:13px;color:#6b7280;padding-bottom:8px;">This code expires in 10 minutes.</td></tr>
+            <tr><td style="font-size:12px;color:#9ca3af;">If you did not create this account, you can safely ignore this email.</td></tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`, fullName, code)
+
+	return s.mailer.SendHTML(toEmail, subject, htmlBody)
 }

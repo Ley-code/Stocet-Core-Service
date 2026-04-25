@@ -52,3 +52,9 @@ func (r *UserRepository) List(limit, offset int) ([]models.User, int64, error) {
 	err := database.DB.Limit(limit).Offset(offset).Find(&users).Error
 	return users, total, err
 }
+
+func (r *UserRepository) SetVerifiedByEmail(email string) error {
+	return database.DB.Model(&models.User{}).
+		Where("email = ?", email).
+		Update("is_verified", true).Error
+}

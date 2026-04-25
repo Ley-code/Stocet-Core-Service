@@ -28,6 +28,9 @@ func SeedInitialAdmin() error {
 	admin := &models.User{
 		ID:                 uuid.New().String(),
 		Email:              "admin@stocet.com",
+		FullName:           "Admin",
+		PhoneNumber:        "",
+		IsVerified:         true,
 		PasswordHash:       hashedPassword,
 		Role:               config.ADMIN_ROLE,
 		SubscriptionStatus: config.SUBSCRIPTION_PREMIUM,

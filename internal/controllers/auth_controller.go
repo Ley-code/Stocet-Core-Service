@@ -49,6 +49,22 @@ func (c *AuthController) Signup(ctx *gin.Context) {
 	utils.SuccessResponse(ctx, 201, response, "Signup successful")
 }
 
+func (c *AuthController) VerifyEmail(ctx *gin.Context) {
+	var req services.VerifyEmailRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(ctx, "Invalid request body")
+		return
+	}
+
+	response, err := c.service.VerifyEmail(req)
+	if err != nil {
+		utils.BadRequest(ctx, err.Error())
+		return
+	}
+
+	utils.SuccessResponse(ctx, 200, response, "Email verified successfully")
+}
+
 // GetMe returns the currently authenticated user's profile
 func (c *AuthController) GetMe(ctx *gin.Context) {
 	userID, _ := ctx.Get("user_id")

@@ -13,6 +13,7 @@ import (
 
 type Sender interface {
 	Send(to string, subject string, body string) error
+	SendHTML(to string, subject string, htmlBody string) error
 	Enabled() bool
 }
 
@@ -47,6 +48,14 @@ func (s *SMTPSender) Enabled() bool {
 }
 
 func (s *SMTPSender) Send(to string, subject string, body string) error {
+	return s.sendWithContentType(to, subject, body, "text/plain; charset=UTF-8")
+}
+
+func (s *SMTPSender) SendHTML(to string, subject string, htmlBody string) error {
+	return s.sendWithContentType(to, subject, htmlBody, "text/html; charset=UTF-8")
+}
+
+func (s *SMTPSender) sendWithContentType(to string, subject string, body string, contentType string) error {
 	if !s.enabled {
 		return fmt.Errorf("smtp sender is disabled")
 	}
@@ -59,7 +68,7 @@ func (s *SMTPSender) Send(to string, subject string, body string) error {
 		fmt.Sprintf("To: %s", to),
 		fmt.Sprintf("Subject: %s", subject),
 		"MIME-Version: 1.0",
-		"Content-Type: text/plain; charset=UTF-8",
+		fmt.Sprintf("Content-Type: %s", contentType),
 	}
 	message := strings.Join(headers, "\r\n") + "\r\n\r\n" + body
 

@@ -58,11 +58,11 @@ func (r *ChatRepository) GetMessagesByChannel(channelID string, limit, offset in
 		Offset(offset).
 		Find(&messages).Error
 
-	// Load user emails for display
+	// Load user display names for chat UI.
 	for i := range messages {
 		var user models.User
-		if err := database.DB.Select("email").Where("id = ?", messages[i].UserID).First(&user).Error; err == nil {
-			messages[i].UserEmail = user.Email
+		if err := database.DB.Select("email", "full_name").Where("id = ?", messages[i].UserID).First(&user).Error; err == nil {
+			messages[i].UserName = user.DisplayName()
 		}
 	}
 
@@ -76,11 +76,11 @@ func (r *ChatRepository) GetRecentMessages(channelID string, limit int) ([]model
 		Limit(limit).
 		Find(&messages).Error
 
-	// Load user emails
+	// Load user display names.
 	for i := range messages {
 		var user models.User
-		if err := database.DB.Select("email").Where("id = ?", messages[i].UserID).First(&user).Error; err == nil {
-			messages[i].UserEmail = user.Email
+		if err := database.DB.Select("email", "full_name").Where("id = ?", messages[i].UserID).First(&user).Error; err == nil {
+			messages[i].UserName = user.DisplayName()
 		}
 	}
 
