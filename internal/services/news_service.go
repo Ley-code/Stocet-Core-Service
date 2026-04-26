@@ -3,6 +3,8 @@ package services
 import (
 	"stocet-core-service/internal/repositories"
 	"time"
+
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type NewsService struct {
@@ -13,8 +15,12 @@ func NewNewsService(repo *repositories.NewsRepository) *NewsService {
 	return &NewsService{repo: repo}
 }
 
-func (s *NewsService) GetNews(filters map[string]interface{}, limit, skip int) ([]repositories.NewsArticle, error) {
-	return s.repo.GetNews(filters, limit, skip)
+func (s *NewsService) GetNews(filters map[string]interface{}, limit, skip int, cursorPublished *time.Time, cursorID *primitive.ObjectID) ([]repositories.NewsArticle, error) {
+	return s.repo.GetNews(filters, limit, skip, cursorPublished, cursorID)
+}
+
+func (s *NewsService) CountNews(filters map[string]interface{}) (int64, error) {
+	return s.repo.CountNews(filters)
 }
 
 func (s *NewsService) DeleteNews(id string) error {

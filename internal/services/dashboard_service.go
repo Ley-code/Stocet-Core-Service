@@ -61,7 +61,7 @@ func (s *DashboardService) GetDashboardData(userID string) (*DashboardData, erro
 
 	// Get recent news
 	newsFilters := map[string]interface{}{}
-	recentNews, err := s.newsService.GetNews(newsFilters, 5, 0)
+	recentNews, err := s.newsService.GetNews(newsFilters, 5, 0, nil, nil)
 	if err != nil {
 		recentNews = []repositories.NewsArticle{}
 	}

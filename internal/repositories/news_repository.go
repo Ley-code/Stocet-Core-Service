@@ -35,14 +35,10 @@ func NewNewsRepository(client *mongo.Client) *NewsRepository {
 	}
 }
 
-func (r *NewsRepository) GetNews(filters map[string]interface{}, limit, skip int) ([]NewsArticle, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
+func buildNewsFilter(filters map[string]interface{}) bson.M {
 	filter := bson.M{}
 
 	if category, ok := filters["category"].(string); ok && category != "" {
-		// Category is stored in tags array in the news-aggregation service
 		filter["tags"] = category
 	}
 
@@ -69,7 +65,48 @@ func (r *NewsRepository) GetNews(filters map[string]interface{}, limit, skip int
 		}
 	}
 
-	opts := options.Find().SetLimit(int64(limit)).SetSkip(int64(skip)).SetSort(bson.D{{Key: "published_date", Value: -1}})
+	return filter
+}
+
+func (r *NewsRepository) CountNews(filters map[string]interface{}) (int64, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	filter := buildNewsFilter(filters)
+	return r.collection.CountDocuments(ctx, filter)
+}
+
+// GetNews returns articles ordered by published_date desc, then _id desc.
+// When cursorPublished and cursorID are non-nil, returns the next page after that composite key (keyset).
+// Otherwise uses skip/limit offset pagination.
+func (r *NewsRepository) GetNews(filters map[string]interface{}, limit, skip int, cursorPublished *time.Time, cursorID *primitive.ObjectID) ([]NewsArticle, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	filter := buildNewsFilter(filters)
+
+	if cursorPublished != nil && cursorID != nil {
+		keyset := bson.M{
+			"$or": []bson.M{
+				{"published_date": bson.M{"$lt": *cursorPublished}},
+				{
+					"$and": []bson.M{
+						{"published_date": *cursorPublished},
+						{"_id": bson.M{"$lt": *cursorID}},
+					},
+				},
+			},
+		}
+		filter = bson.M{"$and": []bson.M{filter, keyset}}
+	}
+
+	opts := options.Find().
+		SetLimit(int64(limit)).
+		SetSort(bson.D{{Key: "published_date", Value: -1}, {Key: "_id", Value: -1}})
+
+	if cursorPublished == nil || cursorID == nil {
+		opts = opts.SetSkip(int64(skip))
+	}
 
 	cursor, err := r.collection.Find(ctx, filter, opts)
 	if err != nil {

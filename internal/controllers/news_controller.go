@@ -1,11 +1,14 @@
 package controllers
 
 import (
+	"net/http"
+	"strconv"
 	"stocet-core-service/internal/services"
 	"stocet-core-service/internal/utils"
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type NewsController struct {
@@ -16,8 +19,21 @@ func NewNewsController(service *services.NewsService) *NewsController {
 	return &NewsController{service: service}
 }
 
+func parseNewsLimit(c *gin.Context, defaultLimit, maxLimit int) int {
+	if l := c.Query("limit"); l != "" {
+		if v, err := strconv.Atoi(l); err == nil && v > 0 {
+			if v > maxLimit {
+				return maxLimit
+			}
+			return v
+		}
+	}
+	return defaultLimit
+}
+
 func (c *NewsController) GetNews(ctx *gin.Context) {
-	pagination := utils.ParsePagination(ctx, 10, 100)
+	limit := parseNewsLimit(ctx, 20, 100)
+	cursorParam := ctx.Query("cursor")
 
 	category := ctx.Query("category")
 	source := ctx.Query("source")
@@ -31,8 +47,7 @@ func (c *NewsController) GetNews(ctx *gin.Context) {
 	}
 	if endDateStr := ctx.Query("end_date"); endDateStr != "" {
 		if parsed, err := utils.ParseDate(endDateStr); err == nil {
-			// Set end_date to end of day if it's a simple date format
-			if len(endDateStr) == 10 { // Simple date format "YYYY-MM-DD"
+			if len(endDateStr) == 10 {
 				parsed = time.Date(parsed.Year(), parsed.Month(), parsed.Day(), 23, 59, 59, 999999999, time.UTC)
 			}
 			endDate = &parsed
@@ -41,17 +56,53 @@ func (c *NewsController) GetNews(ctx *gin.Context) {
 
 	filters := c.service.BuildFilters(category, source, searchText, startDate, endDate)
 
-	articles, err := c.service.GetNews(filters, pagination.Limit, pagination.Skip)
+	var cursorPublished *time.Time
+	var cursorID *primitive.ObjectID
+	if cursorParam != "" {
+		ts, oid, err := utils.DecodeNewsCursor(cursorParam)
+		if err != nil {
+			utils.BadRequest(ctx, "Invalid cursor")
+			return
+		}
+		cursorPublished = &ts
+		cursorID = &oid
+	}
+
+	skip := 0
+	if cursorParam == "" {
+		if s := ctx.Query("skip"); s != "" {
+			if v, err := strconv.Atoi(s); err == nil && v >= 0 {
+				skip = v
+			}
+		}
+	}
+
+	articles, err := c.service.GetNews(filters, limit, skip, cursorPublished, cursorID)
 	if err != nil {
 		utils.InternalServerError(ctx, err, "Failed to fetch news")
 		return
 	}
 
-	utils.SuccessResponse(ctx, 200, gin.H{
-		"articles": articles,
-		"total":    len(articles),
-		"limit":    pagination.Limit,
-		"skip":     pagination.Skip,
+	total, err := c.service.CountNews(filters)
+	if err != nil {
+		utils.InternalServerError(ctx, err, "Failed to count news")
+		return
+	}
+
+	nextCursor := ""
+	if len(articles) == limit {
+		last := articles[len(articles)-1]
+		if last.ID != nil {
+			nextCursor = utils.EncodeNewsCursor(last.PublishedDate, *last.ID)
+		}
+	}
+
+	utils.SuccessResponse(ctx, http.StatusOK, gin.H{
+		"articles":    articles,
+		"total":       total,
+		"limit":       limit,
+		"skip":        skip,
+		"next_cursor": nextCursor,
 	}, "")
 }
 
