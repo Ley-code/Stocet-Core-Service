@@ -41,6 +41,7 @@ type User struct {
 	PasswordHash       string             `gorm:"not null" json:"-"`
 	Role               UserRole           `gorm:"type:user_role;not null;default:'user'" json:"role"`
 	SubscriptionStatus SubscriptionStatus `gorm:"type:subscription_status_enum;not null;default:'free'" json:"subscription_status"`
+	HasSeenTour        bool               `gorm:"not null;default:false" json:"has_seen_tour"`
 	CreatedAt          time.Time          `json:"created_at"`
 	UpdatedAt          time.Time          `json:"updated_at"`
 	DeletedAt          gorm.DeletedAt     `gorm:"index" json:"-"`

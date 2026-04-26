@@ -20,6 +20,9 @@ import (
 	"gorm.io/gorm"
 )
 
+// ErrUserNotVerified is returned when a user tries to login but hasn't verified their email.
+var ErrUserNotVerified = errors.New("USER_NOT_VERIFIED")
+
 type AuthService struct {
 	userRepo             *repositories.UserRepository
 	verificationCodeRepo *repositories.VerificationCodeRepository
@@ -85,7 +88,7 @@ func (s *AuthService) Login(req LoginRequest) (*AuthResponse, error) {
 	}
 
 	if !user.IsVerified {
-		return nil, errors.New("email is not verified. please verify your email before logging in")
+		return nil, fmt.Errorf("%w:%s", ErrUserNotVerified, email)
 	}
 
 	// Check password
@@ -166,7 +169,7 @@ func (s *AuthService) Signup(req SignupRequest) (*SignupResponse, error) {
 	}
 
 	codeHash := hashVerificationCode(code)
-	expiresAt := time.Now().UTC().Add(10 * time.Minute)
+	expiresAt := time.Now().UTC().Add(3 * time.Minute)
 
 	if err := s.verificationCodeRepo.UpsertActiveCode(email, codeHash, expiresAt); err != nil {
 		_ = s.userRepo.Delete(user.ID)
@@ -257,7 +260,7 @@ func (s *AuthService) sendVerificationEmail(toEmail, fullName, code string) erro
                 <div style="display:inline-block;font-size:28px;letter-spacing:6px;font-weight:700;padding:12px 20px;border:1px solid #d1d5db;border-radius:8px;background:#f9fafb;">%s</div>
               </td>
             </tr>
-            <tr><td style="font-size:13px;color:#6b7280;padding-bottom:8px;">This code expires in 10 minutes.</td></tr>
+            <tr><td style="font-size:13px;color:#6b7280;padding-bottom:8px;">This code expires in 3 minutes.</td></tr>
             <tr><td style="font-size:12px;color:#9ca3af;">If you did not create this account, you can safely ignore this email.</td></tr>
           </table>
         </td>
@@ -267,4 +270,40 @@ func (s *AuthService) sendVerificationEmail(toEmail, fullName, code string) erro
 </html>`, fullName, code)
 
 	return s.mailer.SendHTML(toEmail, subject, htmlBody)
+}
+
+// ResendVerification generates a new verification code and sends it to the user's email.
+func (s *AuthService) ResendVerification(emailAddr string) error {
+	emailAddr = strings.ToLower(strings.TrimSpace(emailAddr))
+
+	if !utils.ValidateEmail(emailAddr) {
+		return errors.New("invalid email format")
+	}
+
+	user, err := s.userRepo.GetByEmail(emailAddr)
+	if err != nil {
+		return errors.New("no account found with this email address")
+	}
+
+	if user.IsVerified {
+		return errors.New("this email is already verified")
+	}
+
+	code, err := generateVerificationCode()
+	if err != nil {
+		return errors.New("failed to generate verification code")
+	}
+
+	codeHash := hashVerificationCode(code)
+	expiresAt := time.Now().UTC().Add(3 * time.Minute)
+
+	if err := s.verificationCodeRepo.UpsertActiveCode(emailAddr, codeHash, expiresAt); err != nil {
+		return errors.New("failed to store verification code")
+	}
+
+	if err := s.sendVerificationEmail(emailAddr, user.DisplayName(), code); err != nil {
+		return errors.New("failed to send verification email")
+	}
+
+	return nil
 }
