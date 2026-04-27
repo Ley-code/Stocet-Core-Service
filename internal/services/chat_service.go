@@ -32,7 +32,7 @@ func (s *ChatService) ListChannels() ([]models.Channel, error) {
 	return s.repo.ListChannels()
 }
 
-func (s *ChatService) CreateMessage(channelID, userID, content string) (*models.Message, error) {
+func (s *ChatService) CreateMessage(channelID, userID, content string, parentID *string) (*models.Message, error) {
 	if len(content) > config.CHAT_MESSAGE_MAX_LENGTH {
 		return nil, errors.New("message too long")
 	}
@@ -41,6 +41,7 @@ func (s *ChatService) CreateMessage(channelID, userID, content string) (*models.
 		ChannelID: channelID,
 		UserID:    uuid.MustParse(userID),
 		Content:   content,
+		ParentID:  parentID,
 	}
 
 	if err := s.repo.CreateMessage(message); err != nil {
@@ -48,6 +49,57 @@ func (s *ChatService) CreateMessage(channelID, userID, content string) (*models.
 	}
 
 	return message, nil
+}
+
+func (s *ChatService) EditMessage(messageID, userID, newContent string) (*models.Message, error) {
+	if len(newContent) > config.CHAT_MESSAGE_MAX_LENGTH {
+		return nil, errors.New("message too long")
+	}
+	if newContent == "" {
+		return nil, errors.New("content cannot be empty")
+	}
+
+	message, err := s.repo.GetMessageByID(messageID)
+	if err != nil {
+		return nil, errors.New("message not found")
+	}
+
+	if message.UserID.String() != userID {
+		return nil, errors.New("forbidden")
+	}
+
+	if message.IsDeleted {
+		return nil, errors.New("cannot edit a deleted message")
+	}
+
+	message.Content = newContent
+	message.IsEdited = true
+
+	if err := s.repo.UpdateMessage(message); err != nil {
+		return nil, err
+	}
+
+	return message, nil
+}
+
+func (s *ChatService) DeleteMessage(messageID, userID string) error {
+	message, err := s.repo.GetMessageByID(messageID)
+	if err != nil {
+		return errors.New("message not found")
+	}
+
+	if message.UserID.String() != userID {
+		return errors.New("forbidden")
+	}
+
+	if message.IsDeleted {
+		return errors.New("message already deleted")
+	}
+
+	message.Content = ""
+	message.IsDeleted = true
+
+	return s.repo.UpdateMessage(message)
 }
 
 func (s *ChatService) GetMessages(channelID string, limit, offset int) ([]models.Message, int64, error) {

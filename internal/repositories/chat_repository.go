@@ -44,6 +44,50 @@ func (r *ChatRepository) CreateMessage(message *models.Message) error {
 	return database.DB.Create(message).Error
 }
 
+func (r *ChatRepository) GetMessageByID(id string) (*models.Message, error) {
+	var message models.Message
+	err := database.DB.Where("id = ?", id).First(&message).Error
+	if err != nil {
+		return nil, err
+	}
+	return &message, nil
+}
+
+func (r *ChatRepository) UpdateMessage(message *models.Message) error {
+	return database.DB.Save(message).Error
+}
+
+// enrichMessages loads user display names and parent-message previews.
+func (r *ChatRepository) enrichMessages(messages []models.Message) {
+	for i := range messages {
+		// Load user display name
+		var user models.User
+		if err := database.DB.Select("email", "full_name").Where("id = ?", messages[i].UserID).First(&user).Error; err == nil {
+			messages[i].UserName = user.DisplayName()
+		}
+
+		// Load parent message preview for replies
+		if messages[i].ParentID != nil && *messages[i].ParentID != "" {
+			var parent models.Message
+			if err := database.DB.Select("id", "content", "user_id", "is_deleted").Where("id = ?", *messages[i].ParentID).First(&parent).Error; err == nil {
+				if parent.IsDeleted {
+					messages[i].ParentContent = "This message was deleted"
+				} else {
+					content := parent.Content
+					if len(content) > 80 {
+						content = content[:80] + "…"
+					}
+					messages[i].ParentContent = content
+				}
+				var parentUser models.User
+				if err := database.DB.Select("email", "full_name").Where("id = ?", parent.UserID).First(&parentUser).Error; err == nil {
+					messages[i].ParentUser = parentUser.DisplayName()
+				}
+			}
+		}
+	}
+}
+
 func (r *ChatRepository) GetMessagesByChannel(channelID string, limit, offset int) ([]models.Message, int64, error) {
 	var messages []models.Message
 	var total int64
@@ -58,13 +102,7 @@ func (r *ChatRepository) GetMessagesByChannel(channelID string, limit, offset in
 		Offset(offset).
 		Find(&messages).Error
 
-	// Load user display names for chat UI.
-	for i := range messages {
-		var user models.User
-		if err := database.DB.Select("email", "full_name").Where("id = ?", messages[i].UserID).First(&user).Error; err == nil {
-			messages[i].UserName = user.DisplayName()
-		}
-	}
+	r.enrichMessages(messages)
 
 	return messages, total, err
 }
@@ -76,13 +114,7 @@ func (r *ChatRepository) GetRecentMessages(channelID string, limit int) ([]model
 		Limit(limit).
 		Find(&messages).Error
 
-	// Load user display names.
-	for i := range messages {
-		var user models.User
-		if err := database.DB.Select("email", "full_name").Where("id = ?", messages[i].UserID).First(&user).Error; err == nil {
-			messages[i].UserName = user.DisplayName()
-		}
-	}
+	r.enrichMessages(messages)
 
 	return messages, err
 }

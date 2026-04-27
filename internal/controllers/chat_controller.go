@@ -49,6 +49,29 @@ func (c *ChatController) SendMessage(ctx *gin.Context) {
 	channelID := ctx.Param("id")
 
 	var req struct {
+		Content  string  `json:"content" binding:"required"`
+		ParentID *string `json:"parent_id,omitempty"`
+	}
+
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(ctx, "Invalid request body")
+		return
+	}
+
+	message, err := c.service.CreateMessage(channelID, userID.(string), req.Content, req.ParentID)
+	if err != nil {
+		utils.BadRequest(ctx, err.Error())
+		return
+	}
+
+	utils.SuccessResponse(ctx, 201, message, "Message sent successfully")
+}
+
+func (c *ChatController) EditMessage(ctx *gin.Context) {
+	userID, _ := ctx.Get("user_id")
+	messageID := ctx.Param("id")
+
+	var req struct {
 		Content string `json:"content" binding:"required"`
 	}
 
@@ -57,13 +80,34 @@ func (c *ChatController) SendMessage(ctx *gin.Context) {
 		return
 	}
 
-	message, err := c.service.CreateMessage(channelID, userID.(string), req.Content)
+	message, err := c.service.EditMessage(messageID, userID.(string), req.Content)
 	if err != nil {
+		if err.Error() == "forbidden" {
+			utils.Forbidden(ctx, "You can only edit your own messages")
+			return
+		}
 		utils.BadRequest(ctx, err.Error())
 		return
 	}
 
-	utils.SuccessResponse(ctx, 201, message, "Message sent successfully")
+	utils.SuccessResponse(ctx, 200, message, "Message updated successfully")
+}
+
+func (c *ChatController) DeleteMessage(ctx *gin.Context) {
+	userID, _ := ctx.Get("user_id")
+	messageID := ctx.Param("id")
+
+	err := c.service.DeleteMessage(messageID, userID.(string))
+	if err != nil {
+		if err.Error() == "forbidden" {
+			utils.Forbidden(ctx, "You can only delete your own messages")
+			return
+		}
+		utils.BadRequest(ctx, err.Error())
+		return
+	}
+
+	utils.SuccessResponse(ctx, 200, nil, "Message deleted successfully")
 }
 
 // Admin endpoints
