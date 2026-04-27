@@ -1,0 +1,1 @@
+ALTER TABLE lessons DROP COLUMN IF EXISTS video_url;

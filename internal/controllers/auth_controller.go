@@ -141,3 +141,77 @@ func (c *AuthController) MarkTourSeen(ctx *gin.Context) {
 
 	utils.SuccessResponse(ctx, 200, nil, "Tour marked as seen")
 }
+
+// UpdateProfile updates the authenticated user's display name
+func (c *AuthController) UpdateProfile(ctx *gin.Context) {
+	userID, _ := ctx.Get("user_id")
+
+	var req struct {
+		FullName string `json:"full_name" binding:"required"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(ctx, "full_name is required")
+		return
+	}
+
+	name := strings.TrimSpace(req.FullName)
+	if name == "" {
+		utils.BadRequest(ctx, "full_name cannot be empty")
+		return
+	}
+
+	if err := c.userRepo.UpdateFields(userID.(string), map[string]interface{}{
+		"full_name": name,
+	}); err != nil {
+		utils.InternalServerError(ctx, err, "Failed to update profile")
+		return
+	}
+
+	utils.SuccessResponse(ctx, 200, nil, "Profile updated successfully")
+}
+
+// ChangePassword updates the authenticated user's password
+func (c *AuthController) ChangePassword(ctx *gin.Context) {
+	userID, _ := ctx.Get("user_id")
+
+	var req struct {
+		CurrentPassword string `json:"current_password" binding:"required"`
+		NewPassword     string `json:"new_password" binding:"required"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(ctx, "current_password and new_password are required")
+		return
+	}
+
+	// Get user to verify current password
+	user, err := c.userRepo.GetByID(userID.(string))
+	if err != nil {
+		utils.NotFound(ctx, "User not found")
+		return
+	}
+
+	if !utils.CheckPasswordHash(req.CurrentPassword, user.PasswordHash) {
+		utils.BadRequest(ctx, "Current password is incorrect")
+		return
+	}
+
+	if !utils.ValidatePassword(req.NewPassword) {
+		utils.BadRequest(ctx, "Password must be at least 8 characters with at least one letter and one number")
+		return
+	}
+
+	hashed, err := utils.HashPassword(req.NewPassword)
+	if err != nil {
+		utils.InternalServerError(ctx, err, "Failed to hash password")
+		return
+	}
+
+	if err := c.userRepo.UpdateFields(userID.(string), map[string]interface{}{
+		"password_hash": hashed,
+	}); err != nil {
+		utils.InternalServerError(ctx, err, "Failed to update password")
+		return
+	}
+
+	utils.SuccessResponse(ctx, 200, nil, "Password changed successfully")
+}

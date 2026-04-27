@@ -24,6 +24,7 @@ type Lesson struct {
 	CourseID  string         `gorm:"type:uuid;not null;index" json:"course_id"`
 	Title     string         `gorm:"not null" json:"title"`
 	Content   string         `gorm:"type:text" json:"content"`
+	VideoURL  string         `gorm:"type:text" json:"video_url"`
 	Order     int            `json:"order"`
 	Quiz      *Quiz          `gorm:"foreignKey:LessonID" json:"quiz,omitempty"`
 	CreatedAt time.Time      `json:"created_at"`

@@ -17,5 +17,7 @@ func SetupAuthRoutes(router *gin.RouterGroup, controller *controllers.AuthContro
 		auth.GET("/me", middleware.AuthMiddleware(), controller.GetMe)
 		auth.DELETE("/me", middleware.AuthMiddleware(), controller.DeleteAccount)
 		auth.PUT("/tour-seen", middleware.AuthMiddleware(), controller.MarkTourSeen)
+		auth.PUT("/profile", middleware.AuthMiddleware(), controller.UpdateProfile)
+		auth.PUT("/password", middleware.AuthMiddleware(), controller.ChangePassword)
 	}
 }
