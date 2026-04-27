@@ -2,34 +2,14 @@ package repositories
 
 import (
 	"fmt"
+	"stocet-core-service/internal/models"
 	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 )
 
-type MarketPrice struct {
-	ID            uuid.UUID `gorm:"column:id;type:uuid;default:gen_random_uuid();primaryKey" json:"id"`
-	TickerSymbol  string    `gorm:"column:ticker_symbol;type:text;not null;index:idx_market_prices_ticker_ts,priority:1" json:"ticker_symbol"`
-	Price         float64   `gorm:"column:price;type:numeric;not null" json:"price"`
-	PercentChange float64   `gorm:"column:percent_change;type:numeric;not null" json:"percent_change"`
-	Variation     float64   `gorm:"column:variation;type:numeric;not null" json:"variation"`
-	Timestamp     time.Time `gorm:"column:timestamp;type:timestamptz;not null;index:idx_market_prices_ticker_ts,priority:2,sort:desc" json:"timestamp"`
-	Source        string    `gorm:"column:source;type:text;not null;default:ESX" json:"source"`
-	CreatedAt     time.Time `gorm:"column:created_at;type:timestamptz;not null;default:now()" json:"created_at"`
-}
 
-func (MarketPrice) TableName() string {
-	return "market_prices"
-}
-
-type Candle struct {
-	Time  time.Time `json:"time"`
-	Open  float64   `json:"open"`
-	High  float64   `json:"high"`
-	Low   float64   `json:"low"`
-	Close float64   `json:"close"`
-}
 
 type MarketDataRepository struct {
 	db *gorm.DB
@@ -41,8 +21,8 @@ func NewMarketDataRepository(db *gorm.DB) *MarketDataRepository {
 	}
 }
 
-func (r *MarketDataRepository) GetLatestAll() ([]MarketPrice, error) {
-	var prices []MarketPrice
+func (r *MarketDataRepository) GetLatestAll() ([]models.MarketPrice, error) {
+	var prices []models.MarketPrice
 	err := r.db.Raw(`
 		SELECT DISTINCT ON (ticker_symbol)
 			id,
@@ -77,8 +57,8 @@ func (r *MarketDataRepository) GetAllTickers() ([]string, error) {
 	return tickers, nil
 }
 
-func (r *MarketDataRepository) GetLatestByTicker(ticker string) (*MarketPrice, error) {
-	var price MarketPrice
+func (r *MarketDataRepository) GetLatestByTicker(ticker string) (*models.MarketPrice, error) {
+	var price models.MarketPrice
 	err := r.db.
 		Where("ticker_symbol = ?", ticker).
 		Order(`"timestamp" DESC`).
@@ -94,8 +74,8 @@ func (r *MarketDataRepository) GetLatestByTicker(ticker string) (*MarketPrice, e
 	return &price, nil
 }
 
-func (r *MarketDataRepository) GetByTickerAndDateRange(ticker string, startDate, endDate time.Time) ([]MarketPrice, error) {
-	var prices []MarketPrice
+func (r *MarketDataRepository) GetByTickerAndDateRange(ticker string, startDate, endDate time.Time) ([]models.MarketPrice, error) {
+	var prices []models.MarketPrice
 	err := r.db.
 		Where("ticker_symbol = ? AND timestamp >= ? AND timestamp <= ?", ticker, startDate, endDate).
 		Order(`"timestamp" ASC`).
@@ -107,7 +87,7 @@ func (r *MarketDataRepository) GetByTickerAndDateRange(ticker string, startDate,
 	return prices, nil
 }
 
-func (r *MarketDataRepository) GetCandles(ticker, resolution string, startDate, endDate time.Time, fillGaps bool) ([]Candle, error) {
+func (r *MarketDataRepository) GetCandles(ticker, resolution string, startDate, endDate time.Time, fillGaps bool) ([]models.Candle, error) {
 	if resolution != "1m" && resolution != "5m" && resolution != "1h" && resolution != "1d" {
 		return nil, fmt.Errorf("unsupported resolution: %s", resolution)
 	}
@@ -141,7 +121,7 @@ func (r *MarketDataRepository) GetCandles(ticker, resolution string, startDate, 
 	ORDER BY bucket_ts ASC
 	`
 
-	var candles []Candle
+	var candles []models.Candle
 	err := r.db.Raw(query, resolution, resolution, resolution, resolution, ticker, startDate, endDate).Scan(&candles).Error
 	if err != nil {
 		return nil, err
@@ -154,7 +134,7 @@ func (r *MarketDataRepository) GetCandles(ticker, resolution string, startDate, 
 	return fillCandleGaps(candles, startDate.UTC(), endDate.UTC(), resolution), nil
 }
 
-func fillCandleGaps(candles []Candle, startDate, endDate time.Time, resolution string) []Candle {
+func fillCandleGaps(candles []models.Candle, startDate, endDate time.Time, resolution string) []models.Candle {
 	if len(candles) == 0 || endDate.Before(startDate) {
 		return candles
 	}
@@ -170,10 +150,10 @@ func fillCandleGaps(candles []Candle, startDate, endDate time.Time, resolution s
 		return candles
 	}
 
-	candleMap := make(map[int64]Candle, len(candles))
+	candleMap := make(map[int64]models.Candle, len(candles))
 	for _, c := range candles {
 		t := alignTimeToResolution(c.Time.UTC(), resolution)
-		candleMap[t.Unix()] = Candle{
+		candleMap[t.Unix()] = models.Candle{
 			Time:  t,
 			Open:  c.Open,
 			High:  c.High,
@@ -182,7 +162,7 @@ func fillCandleGaps(candles []Candle, startDate, endDate time.Time, resolution s
 		}
 	}
 
-	result := make([]Candle, 0)
+	result := make([]models.Candle, 0)
 	var lastClose float64
 	hasLastClose := false
 
@@ -197,7 +177,7 @@ func fillCandleGaps(candles []Candle, startDate, endDate time.Time, resolution s
 		if !hasLastClose {
 			continue
 		}
-		result = append(result, Candle{
+		result = append(result, models.Candle{
 			Time:  ts,
 			Open:  lastClose,
 			High:  lastClose,

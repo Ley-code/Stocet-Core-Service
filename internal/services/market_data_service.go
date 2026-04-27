@@ -1,6 +1,7 @@
 package services
 
 import (
+	"stocet-core-service/internal/models"
 	"stocet-core-service/internal/repositories"
 	"time"
 )
@@ -13,7 +14,7 @@ func NewMarketDataService(repo *repositories.MarketDataRepository) *MarketDataSe
 	return &MarketDataService{repo: repo}
 }
 
-func (s *MarketDataService) GetLatestAll() ([]repositories.MarketPrice, error) {
+func (s *MarketDataService) GetLatestAll() ([]models.MarketPrice, error) {
 	return s.repo.GetLatestAll()
 }
 
@@ -21,15 +22,15 @@ func (s *MarketDataService) GetAllTickers() ([]string, error) {
 	return s.repo.GetAllTickers()
 }
 
-func (s *MarketDataService) GetLatestByTicker(ticker string) (*repositories.MarketPrice, error) {
+func (s *MarketDataService) GetLatestByTicker(ticker string) (*models.MarketPrice, error) {
 	return s.repo.GetLatestByTicker(ticker)
 }
 
-func (s *MarketDataService) GetByTickerAndDateRange(ticker string, startDate, endDate time.Time) ([]repositories.MarketPrice, error) {
+func (s *MarketDataService) GetByTickerAndDateRange(ticker string, startDate, endDate time.Time) ([]models.MarketPrice, error) {
 	return s.repo.GetByTickerAndDateRange(ticker, startDate, endDate)
 }
 
-func (s *MarketDataService) GetCandles(ticker, resolution string, startDate, endDate time.Time, fillGaps bool) ([]repositories.Candle, error) {
+func (s *MarketDataService) GetCandles(ticker, resolution string, startDate, endDate time.Time, fillGaps bool) ([]models.Candle, error) {
 	return s.repo.GetCandles(ticker, resolution, startDate, endDate, fillGaps)
 }
 
@@ -71,7 +72,7 @@ func (s *MarketDataService) ComputeTechnicalIndicators(ticker string, periodDays
 	}, nil
 }
 
-func calculateSMA(prices []repositories.MarketPrice, period int) float64 {
+func calculateSMA(prices []models.MarketPrice, period int) float64 {
 	if len(prices) < period {
 		period = len(prices)
 	}
@@ -86,7 +87,7 @@ func calculateSMA(prices []repositories.MarketPrice, period int) float64 {
 	return sum / float64(period)
 }
 
-func calculateEMA(prices []repositories.MarketPrice, period int) float64 {
+func calculateEMA(prices []models.MarketPrice, period int) float64 {
 	if len(prices) < period {
 		period = len(prices)
 	}
@@ -104,7 +105,7 @@ func calculateEMA(prices []repositories.MarketPrice, period int) float64 {
 	return ema
 }
 
-func calculateRSI(prices []repositories.MarketPrice, period int) float64 {
+func calculateRSI(prices []models.MarketPrice, period int) float64 {
 	if len(prices) < period+1 {
 		return 0.0
 	}

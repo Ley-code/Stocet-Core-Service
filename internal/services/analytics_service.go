@@ -3,7 +3,6 @@ package services
 import (
 	"stocet-core-service/internal/database"
 	"stocet-core-service/internal/models"
-	"stocet-core-service/internal/repositories"
 	"time"
 )
 
@@ -61,7 +60,7 @@ func (s *AnalyticsService) GetDashboardMetrics() (*DashboardMetrics, error) {
 	}, nil
 }
 
-func (s *AnalyticsService) buildMarketSummary(prices []repositories.MarketPrice) MarketSummary {
+func (s *AnalyticsService) buildMarketSummary(prices []models.MarketPrice) MarketSummary {
 	if len(prices) == 0 {
 		return MarketSummary{}
 	}

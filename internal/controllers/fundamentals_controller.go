@@ -294,7 +294,7 @@ func (ctrl *FundamentalsController) GetPublicScorecard(c *gin.Context) {
 	utils.SuccessResponse(c, http.StatusOK, sc, "")
 }
 
-// GetPublicCompanyDirectory returns ticker → company_name pairs for market list enrichment.
+// GetPublicCompanyDirectory returns ticker, company name, and optional shares for market list and cap charts.
 func (ctrl *FundamentalsController) GetPublicCompanyDirectory(c *gin.Context) {
 	entries, err := ctrl.svc.GetPublicCompanyDirectory()
 	if err != nil {

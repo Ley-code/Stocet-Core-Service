@@ -91,7 +91,7 @@ func (s *DashboardService) GetDashboardData(userID string) (*DashboardData, erro
 	}, nil
 }
 
-func (s *DashboardService) buildMarketSummary(prices []repositories.MarketPrice) MarketSummaryData {
+func (s *DashboardService) buildMarketSummary(prices []models.MarketPrice) MarketSummaryData {
 	if len(prices) == 0 {
 		return MarketSummaryData{}
 	}
@@ -111,7 +111,7 @@ func (s *DashboardService) buildMarketSummary(prices []repositories.MarketPrice)
 	}
 }
 
-func (s *DashboardService) getTopMovers(prices []repositories.MarketPrice) ([]TopMoverData, []TopMoverData) {
+func (s *DashboardService) getTopMovers(prices []models.MarketPrice) ([]TopMoverData, []TopMoverData) {
 	gainers := make([]TopMoverData, 0)
 	losers := make([]TopMoverData, 0)
 
