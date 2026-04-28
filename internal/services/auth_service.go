@@ -26,17 +26,20 @@ var ErrUserNotVerified = errors.New("USER_NOT_VERIFIED")
 type AuthService struct {
 	userRepo             *repositories.UserRepository
 	verificationCodeRepo *repositories.VerificationCodeRepository
+	inviteCodeRepo       *repositories.InviteCodeRepository
 	mailer               email.Sender
 }
 
 func NewAuthService(
 	userRepo *repositories.UserRepository,
 	verificationCodeRepo *repositories.VerificationCodeRepository,
+	inviteCodeRepo *repositories.InviteCodeRepository,
 	mailer email.Sender,
 ) *AuthService {
 	return &AuthService{
 		userRepo:             userRepo,
 		verificationCodeRepo: verificationCodeRepo,
+		inviteCodeRepo:       inviteCodeRepo,
 		mailer:               mailer,
 	}
 }
@@ -51,6 +54,7 @@ type SignupRequest struct {
 	Password    string `json:"password" binding:"required"`
 	FullName    string `json:"full_name" binding:"required"`
 	PhoneNumber string `json:"phone_number" binding:"required"`
+	InviteCode  string `json:"invite_code" binding:"required"`
 }
 
 type AuthResponse struct {
@@ -140,9 +144,15 @@ func (s *AuthService) Signup(req SignupRequest) (*SignupResponse, error) {
 		return nil, errors.New("failed to validate existing user")
 	}
 
+	inviteTrim := strings.TrimSpace(req.InviteCode)
+	if err := s.inviteCodeRepo.Consume(inviteTrim); err != nil {
+		return nil, err
+	}
+
 	// Hash password
 	hashedPassword, err := utils.HashPassword(req.Password)
 	if err != nil {
+		_ = s.inviteCodeRepo.Release(inviteTrim)
 		return nil, errors.New("failed to hash password")
 	}
 
@@ -159,12 +169,14 @@ func (s *AuthService) Signup(req SignupRequest) (*SignupResponse, error) {
 	}
 
 	if err := s.userRepo.Create(user); err != nil {
+		_ = s.inviteCodeRepo.Release(inviteTrim)
 		return nil, errors.New("failed to create user")
 	}
 
 	code, err := generateVerificationCode()
 	if err != nil {
 		_ = s.userRepo.Delete(user.ID)
+		_ = s.inviteCodeRepo.Release(inviteTrim)
 		return nil, errors.New("failed to generate verification code")
 	}
 
@@ -173,11 +185,13 @@ func (s *AuthService) Signup(req SignupRequest) (*SignupResponse, error) {
 
 	if err := s.verificationCodeRepo.UpsertActiveCode(email, codeHash, expiresAt); err != nil {
 		_ = s.userRepo.Delete(user.ID)
+		_ = s.inviteCodeRepo.Release(inviteTrim)
 		return nil, errors.New("failed to store verification code")
 	}
 
 	if err := s.sendVerificationEmail(email, fullName, code); err != nil {
 		_ = s.userRepo.Delete(user.ID)
+		_ = s.inviteCodeRepo.Release(inviteTrim)
 		return nil, errors.New("failed to send verification email")
 	}
 

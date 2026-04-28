@@ -59,13 +59,14 @@ func SetupRouter() *gin.Engine {
 	emailSender := email.NewSMTPSender(config.AppConfig)
 	notificationsRepo := repositories.NewNotificationsRepository(emailSender)
 	verificationCodeRepo := repositories.NewVerificationCodeRepository()
+	inviteCodeRepo := repositories.NewInviteCodeRepository()
 	newsRepo := repositories.NewNewsRepository(database.MongoDBClient)
 	marketDataRepo := repositories.NewMarketDataRepository(database.DB)
 	watchlistRepo := repositories.NewWatchlistRepository()
 	fundamentalsRepo := repositories.NewFundamentalAnalysisRepository()
 
 	// Initialize services
-	authService := services.NewAuthService(userRepo, verificationCodeRepo, emailSender)
+	authService := services.NewAuthService(userRepo, verificationCodeRepo, inviteCodeRepo, emailSender)
 	cspService := services.NewCapitalServiceProvidersService(cspRepo)
 	educationService := services.NewEducationService(educationRepo)
 	chatService := services.NewChatService(chatRepo)
