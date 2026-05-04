@@ -13,7 +13,9 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -101,7 +103,7 @@ func (c *GeminiClient) Embed(ctx context.Context, text string) ([]float32, error
 	url := fmt.Sprintf("%s/models/%s:embedContent?key=%s", geminiBaseURL, c.embedModel, c.apiKey)
 
 	var out embedResponse
-	if err := c.doJSON(ctx, http.MethodPost, url, body, &out); err != nil {
+	if err := c.doJSON(ctx, http.MethodPost, url, body, &out, "embedContent"); err != nil {
 		return nil, err
 	}
 	if len(out.Embedding.Values) == 0 {
@@ -266,7 +268,7 @@ func (c *GeminiClient) GenerateContent(ctx context.Context, req GeminiRequest) (
 	}
 	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", geminiBaseURL, c.chatModel, c.apiKey)
 	var out GeminiResponse
-	if err := c.doJSON(ctx, http.MethodPost, url, req, &out); err != nil {
+	if err := c.doJSON(ctx, http.MethodPost, url, req, &out, "generateContent"); err != nil {
 		return nil, err
 	}
 	return &out, nil
@@ -276,11 +278,11 @@ func (c *GeminiClient) GenerateContent(ctx context.Context, req GeminiRequest) (
 // HTTP plumbing with one retry on 429/5xx
 // ----------------------------------------------------------------------------
 
-func (c *GeminiClient) doJSON(ctx context.Context, method, url string, body any, out any) error {
+func (c *GeminiClient) doJSON(ctx context.Context, method, rawURL string, body any, out any, op string) error {
 	const maxAttempts = 2
 	var lastErr error
 	for attempt := 1; attempt <= maxAttempts; attempt++ {
-		err := c.doOnce(ctx, method, url, body, out)
+		err := c.doOnce(ctx, method, rawURL, body, out, op)
 		if err == nil {
 			return nil
 		}
@@ -295,37 +297,62 @@ func (c *GeminiClient) doJSON(ctx context.Context, method, url string, body any,
 		case <-time.After(time.Duration(attempt) * 400 * time.Millisecond):
 		}
 	}
+	if lastErr != nil {
+		log.Printf("[ai][gemini] op=%s giving_up_after_retries err=%v", op, lastErr)
+	}
 	return lastErr
 }
 
-func (c *GeminiClient) doOnce(ctx context.Context, method, url string, body any, out any) error {
+// geminiLogPath returns the URL path only (no query / API key) for CloudWatch logs.
+func geminiLogPath(rawURL string) string {
+	if i := strings.Index(rawURL, "?"); i >= 0 {
+		rawURL = rawURL[:i]
+	}
+	u, err := url.Parse(rawURL)
+	if err != nil {
+		return "(invalid_url)"
+	}
+	return u.Path
+}
+
+func (c *GeminiClient) doOnce(ctx context.Context, method, rawURL string, body any, out any, op string) error {
+	path := geminiLogPath(rawURL)
 	var reqBody io.Reader
 	if body != nil {
 		raw, err := json.Marshal(body)
 		if err != nil {
+			log.Printf("[ai][gemini] op=%s path=%s marshal_request err=%v", op, path, err)
 			return fmt.Errorf("gemini: marshal request: %w", err)
 		}
 		reqBody = bytes.NewReader(raw)
 	}
-	req, err := http.NewRequestWithContext(ctx, method, url, reqBody)
+	req, err := http.NewRequestWithContext(ctx, method, rawURL, reqBody)
 	if err != nil {
+		log.Printf("[ai][gemini] op=%s path=%s build_request err=%v", op, path, err)
 		return fmt.Errorf("gemini: build request: %w", err)
+	}
+	if req.URL != nil && req.URL.Path != "" {
+		path = req.URL.Path
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
 
 	resp, err := c.http.Do(req)
 	if err != nil {
+		log.Printf("[ai][gemini] op=%s path=%s transport_error=%v", op, path, err)
 		return fmt.Errorf("%w: %v", ErrGeminiUnavailable, err)
 	}
 	defer resp.Body.Close()
 
 	respBody, err := io.ReadAll(resp.Body)
 	if err != nil {
+		log.Printf("[ai][gemini] op=%s path=%s read_body err=%v", op, path, err)
 		return fmt.Errorf("gemini: read body: %w", err)
 	}
 
 	if resp.StatusCode >= 400 {
+		snippet := truncate(string(respBody), 500)
+		log.Printf("[ai][gemini] op=%s path=%s status=%d response_body=%q", op, path, resp.StatusCode, snippet)
 		// 429 or 5xx are considered transient.
 		if resp.StatusCode == http.StatusTooManyRequests || resp.StatusCode >= 500 {
 			return fmt.Errorf("%w: gemini %d: %s", ErrGeminiUnavailable, resp.StatusCode, truncate(string(respBody), 300))
@@ -336,6 +363,7 @@ func (c *GeminiClient) doOnce(ctx context.Context, method, url string, body any,
 		return nil
 	}
 	if err := json.Unmarshal(respBody, out); err != nil {
+		log.Printf("[ai][gemini] op=%s path=%s json_unmarshal err=%v body_prefix=%q", op, path, err, truncate(string(respBody), 400))
 		return fmt.Errorf("gemini: decode body: %w", err)
 	}
 	return nil

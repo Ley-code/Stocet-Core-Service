@@ -3,6 +3,7 @@ package controllers
 import (
 	"context"
 	"errors"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -40,7 +41,13 @@ const maxMessageContentChars = 8000
 // Chat handles POST /ai/chat. It assumes AuthMiddleware has already gated
 // the route so we don't recheck authentication here.
 func (c *AIController) Chat(ctx *gin.Context) {
-	if c.svc == nil || !c.svc.Configured() {
+	if c.svc == nil {
+		log.Printf("[ai][chat] 503 client_ip=%s reason=ai_service_nil", ctx.ClientIP())
+		respondGraceful(ctx)
+		return
+	}
+	if !c.svc.Configured() {
+		log.Printf("[ai][chat] 503 client_ip=%s reason=gemini_not_configured (set GEMINI_API_KEY in Lambda/env)", ctx.ClientIP())
 		respondGraceful(ctx)
 		return
 	}
@@ -77,20 +84,26 @@ func (c *AIController) Chat(ctx *gin.Context) {
 		return
 	}
 
+	msgCount := len(req.Messages)
+	totalChars := 0
+	for _, m := range req.Messages {
+		totalChars += len(m.Content)
+	}
+	log.Printf("[ai][chat] start client_ip=%s messages=%d total_content_chars=%d", ctx.ClientIP(), msgCount, totalChars)
+
 	// Bound the upstream call so we can fail gracefully if Gemini stalls.
 	callCtx, cancel := context.WithTimeout(ctx.Request.Context(), 60*time.Second)
 	defer cancel()
 
 	answer, err := c.svc.Chat(callCtx, req.Messages)
 	if err != nil {
-		if errors.Is(err, services.ErrAIDataEngineUnavailable) {
-			respondGraceful(ctx)
-			return
-		}
+		engine := errors.Is(err, services.ErrAIDataEngineUnavailable)
+		log.Printf("[ai][chat] 503 client_ip=%s messages=%d err=%q is_engine_unavailable=%v", ctx.ClientIP(), msgCount, err.Error(), engine)
 		respondGraceful(ctx)
 		return
 	}
 
+	log.Printf("[ai][chat] ok client_ip=%s messages=%d answer_chars=%d", ctx.ClientIP(), msgCount, len(answer))
 	utils.SuccessResponse(ctx, http.StatusOK, gin.H{
 		"message": gin.H{
 			"role":    "assistant",

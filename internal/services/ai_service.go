@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"strings"
 
@@ -77,8 +78,16 @@ func (s *AIService) Chat(ctx context.Context, history []ChatMessage) (string, er
 
 	trimmed := truncateHistory(history, s.maxTurns, s.maxChars)
 	if len(trimmed) == 0 {
+		log.Printf("[ai][chat] abort reason=empty_history_after_truncation max_turns=%d max_chars=%d", s.maxTurns, s.maxChars)
 		return "", errors.New("ai: empty history")
 	}
+
+	chars := 0
+	for _, m := range trimmed {
+		chars += len(m.Content)
+	}
+	log.Printf("[ai][chat] gemini_request model=%s turns=%d content_chars=%d max_turns=%d max_chars=%d",
+		s.client.ChatModel(), len(trimmed), chars, s.maxTurns, s.maxChars)
 
 	contents := make([]ai.GeminiContent, 0, len(trimmed))
 	for _, m := range trimmed {
@@ -103,7 +112,7 @@ func (s *AIService) Chat(ctx context.Context, history []ChatMessage) (string, er
 	for round := 0; round <= s.maxToolRounds; round++ {
 		resp, err := s.client.GenerateContent(ctx, req)
 		if err != nil {
-			log.Printf("[ai] generateContent error: %v", err)
+			log.Printf("[ai][chat] generateContent_failed round=%d err=%v", round, err)
 			return "", ErrAIDataEngineUnavailable
 		}
 
@@ -111,8 +120,10 @@ func (s *AIService) Chat(ctx context.Context, history []ChatMessage) (string, er
 		if len(calls) == 0 {
 			text := strings.TrimSpace(resp.Text())
 			if text == "" {
+				log.Printf("[ai][chat] empty_model_text round=%d %s", round, summarizeGeminiResponse(resp))
 				return "", ErrAIDataEngineUnavailable
 			}
+			log.Printf("[ai][chat] complete round=%d reply_chars=%d", round, len(text))
 			return text, nil
 		}
 		if round == s.maxToolRounds {
@@ -120,21 +131,55 @@ func (s *AIService) Chat(ctx context.Context, history []ChatMessage) (string, er
 			// produced alongside the calls, or the graceful error.
 			text := strings.TrimSpace(resp.Text())
 			if text != "" {
+				log.Printf("[ai][chat] complete_after_tool_cap round=%d reply_chars=%d", round, len(text))
 				return text, nil
 			}
+			log.Printf("[ai][chat] empty_model_text_after_tool_cap round=%d %s", round, summarizeGeminiResponse(resp))
 			return "", ErrAIDataEngineUnavailable
 		}
 
+		toolNames := make([]string, len(calls))
+		for i := range calls {
+			toolNames[i] = calls[i].Name
+		}
+		log.Printf("[ai][chat] tool_round=%d tools=%v", round, toolNames)
+
 		// Echo the model's tool-call turn back into history, then append our
 		// function responses, then re-request.
-		req.Contents = append(req.Contents, resp.FirstCandidate().Content)
+		fc := resp.FirstCandidate()
+		if fc == nil {
+			log.Printf("[ai][chat] nil_first_candidate round=%d candidates=%d", round, len(resp.Candidates))
+			return "", ErrAIDataEngineUnavailable
+		}
+		req.Contents = append(req.Contents, fc.Content)
 		for _, call := range calls {
 			result := s.dispatchToolCall(ctx, call)
+			if errVal, ok := result["error"].(string); ok && errVal != "" {
+				log.Printf("[ai][tool] name=%s tool_error=%q", call.Name, errVal)
+			} else {
+				log.Printf("[ai][tool] name=%s ok", call.Name)
+			}
 			req.Contents = append(req.Contents, ai.NewFunctionResponseContent(call.Name, result))
 		}
 	}
 
+	log.Printf("[ai][chat] exhausted_tool_loop max_rounds=%d", s.maxToolRounds)
 	return "", ErrAIDataEngineUnavailable
+}
+
+// summarizeGeminiResponse builds a short, log-safe summary when the model
+// returns no text (blocked, malformed, or empty candidates).
+func summarizeGeminiResponse(resp *ai.GeminiResponse) string {
+	if resp == nil {
+		return "response=nil"
+	}
+	n := len(resp.Candidates)
+	if n == 0 {
+		return "candidates=0"
+	}
+	c := resp.Candidates[0]
+	parts := len(c.Content.Parts)
+	return fmt.Sprintf("candidates=%d finish_reason=%q parts=%d", n, c.FinishReason, parts)
 }
 
 // dispatchToolCall routes a single tool call to the right service.
