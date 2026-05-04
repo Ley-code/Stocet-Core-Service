@@ -3,6 +3,7 @@ package config
 import (
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/joho/godotenv"
 )
@@ -36,6 +37,16 @@ type Config struct {
 	SMTPUsername string
 	SMTPPassword string
 	SMTPFrom     string
+
+	// AI / Gemini (RAG Data Assistant)
+	GeminiAPIKey          string
+	GeminiChatModel       string
+	GeminiEmbedModel      string
+	AIChatHistoryMaxTurns int
+	AIChatHistoryMaxChars int
+	AIRequestTimeoutSec   int
+	AIBackfillIntervalSec int
+	AIBackfillBatchSize   int
 }
 
 var AppConfig *Config
@@ -66,6 +77,15 @@ func LoadConfig() error {
 		SMTPUsername: getEnv("SMTP_USERNAME", ""),
 		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
 		SMTPFrom:     getEnv("SMTP_FROM", ""),
+
+		GeminiAPIKey:          getEnv("GEMINI_API_KEY", ""),
+		GeminiChatModel:       getEnv("GEMINI_CHAT_MODEL", "gemini-1.5-flash"),
+		GeminiEmbedModel:      getEnv("GEMINI_EMBED_MODEL", "text-embedding-004"),
+		AIChatHistoryMaxTurns: getEnvInt("AI_CHAT_MAX_TURNS", 12),
+		AIChatHistoryMaxChars: getEnvInt("AI_CHAT_MAX_CHARS", 16000),
+		AIRequestTimeoutSec:   getEnvInt("AI_REQUEST_TIMEOUT_SEC", 25),
+		AIBackfillIntervalSec: getEnvInt("AI_BACKFILL_INTERVAL_SEC", 300),
+		AIBackfillBatchSize:   getEnvInt("AI_BACKFILL_BATCH_SIZE", 25),
 	}
 
 	if AppConfig.JWTSecret == "change-me-in-production" && AppConfig.Environment == "production" {
@@ -78,6 +98,15 @@ func LoadConfig() error {
 func getEnv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
 		return value
+	}
+	return defaultValue
+}
+
+func getEnvInt(key string, defaultValue int) int {
+	if raw := os.Getenv(key); raw != "" {
+		if v, err := strconv.Atoi(raw); err == nil {
+			return v
+		}
 	}
 	return defaultValue
 }

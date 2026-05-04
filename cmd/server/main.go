@@ -4,6 +4,8 @@ import (
 	"context"
 	"log"
 	"os"
+	"time"
+
 	"stocet-core-service/internal/config"
 	"stocet-core-service/internal/controllers"
 	"stocet-core-service/internal/database"
@@ -12,6 +14,7 @@ import (
 	"stocet-core-service/internal/repositories"
 	"stocet-core-service/internal/routes"
 	"stocet-core-service/internal/services"
+	"stocet-core-service/internal/services/ai"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -65,6 +68,24 @@ func SetupRouter() *gin.Engine {
 	watchlistRepo := repositories.NewWatchlistRepository()
 	fundamentalsRepo := repositories.NewFundamentalAnalysisRepository()
 
+	// Initialize AI / Gemini stack first so other services can opt in to embedding hooks.
+	geminiClient := ai.NewGeminiClient(
+		config.AppConfig.GeminiAPIKey,
+		config.AppConfig.GeminiChatModel,
+		config.AppConfig.GeminiEmbedModel,
+		time.Duration(config.AppConfig.AIRequestTimeoutSec)*time.Second,
+	)
+	embedder := ai.NewEmbedder(database.DB, geminiClient)
+	ragService := ai.NewRAGService(database.DB, embedder, fundamentalsRepo)
+	taService := ai.NewTechnicalAnalysisService(marketDataRepo)
+	aiService := services.NewAIService(
+		geminiClient,
+		ragService,
+		taService,
+		config.AppConfig.AIChatHistoryMaxTurns,
+		config.AppConfig.AIChatHistoryMaxChars,
+	)
+
 	// Initialize services
 	authService := services.NewAuthService(userRepo, verificationCodeRepo, inviteCodeRepo, emailSender)
 	cspService := services.NewCapitalServiceProvidersService(cspRepo)
@@ -77,7 +98,7 @@ func SetupRouter() *gin.Engine {
 	analyticsService := services.NewAnalyticsService(marketDataService)
 	dashboardService := services.NewDashboardService(newsService, marketDataService, alertsService)
 	watchlistService := services.NewWatchlistService(watchlistRepo)
-	fundamentalsService := services.NewFundamentalsService(fundamentalsRepo)
+	fundamentalsService := services.NewFundamentalsService(fundamentalsRepo).WithEmbedder(embedder)
 
 	// Initialize controllers
 	authController := controllers.NewAuthController(authService, userRepo)
@@ -93,6 +114,7 @@ func SetupRouter() *gin.Engine {
 	adminController := controllers.NewAdminController(userRepo)
 	fundamentalsController := controllers.NewFundamentalsController(fundamentalsService)
 	watchlistController := controllers.NewWatchlistController(watchlistService)
+	aiController := controllers.NewAIController(aiService)
 
 	// Setup Gin router
 	if config.AppConfig.Environment == "production" {
@@ -125,6 +147,19 @@ func SetupRouter() *gin.Engine {
 		routes.SetupAdminRoutes(api, adminController, fundamentalsController)
 		routes.SetupFundamentalsPublicRoutes(api, fundamentalsController)
 		routes.SetupWatchlistRoutes(api, watchlistController)
+		routes.SetupAIRoutes(api, aiController)
+	}
+
+	// Long-running embedding backfill is only safe outside Lambda (where
+	// the process is recycled per invocation). On Lambda, schedule a
+	// separate job to call ai.RunBackfillOnce(...) periodically.
+	if os.Getenv("LAMBDA_TASK_ROOT") == "" {
+		go ai.StartBackfillWorker(
+			context.Background(),
+			embedder,
+			time.Duration(config.AppConfig.AIBackfillIntervalSec)*time.Second,
+			config.AppConfig.AIBackfillBatchSize,
+		)
 	}
 
 	return router

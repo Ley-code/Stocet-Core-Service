@@ -2,6 +2,7 @@ package repositories
 
 import (
 	"fmt"
+	"math"
 	"stocet-core-service/internal/models"
 	"time"
 
@@ -127,11 +128,37 @@ func (r *MarketDataRepository) GetCandles(ticker, resolution string, startDate, 
 		return nil, err
 	}
 
+	// ESX intraday data sometimes carries only open/close per session, which
+	// can leave high/low equal to the single price point or even violate the
+	// OHLC invariant when the SQL aggregation degenerates. Normalize so the
+	// frontend candlestick wicks always render correctly.
+	candles = normalizeCandleOHLC(candles)
+
 	if !fillGaps {
 		return candles, nil
 	}
 
 	return fillCandleGaps(candles, startDate.UTC(), endDate.UTC(), resolution), nil
+}
+
+// normalizeCandleOHLC enforces the candlestick invariant
+// `low <= min(open, close) <= max(open, close) <= high`. When `high` is
+// missing or below max(open, close), it is widened to that max; symmetric
+// fix for `low`. This guarantees lightweight-charts always renders a valid
+// candle.
+func normalizeCandleOHLC(candles []models.Candle) []models.Candle {
+	for i := range candles {
+		c := &candles[i]
+		hi := math.Max(c.Open, c.Close)
+		lo := math.Min(c.Open, c.Close)
+		if c.High < hi || c.High == 0 {
+			c.High = hi
+		}
+		if c.Low > lo || c.Low == 0 {
+			c.Low = lo
+		}
+	}
+	return candles
 }
 
 func fillCandleGaps(candles []models.Candle, startDate, endDate time.Time, resolution string) []models.Candle {

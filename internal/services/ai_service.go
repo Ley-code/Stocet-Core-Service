@@ -1,0 +1,255 @@
+package services
+
+import (
+	"context"
+	"errors"
+	"log"
+	"strings"
+
+	"stocet-core-service/internal/services/ai"
+)
+
+// SystemPromptDataAssistant is the strict, hardcoded system prompt for the
+// Stocet Data Assistant. Any change to this string is a behavioural change
+// for every conversation, so we keep it in code (not config).
+const SystemPromptDataAssistant = "You are the Stocet Data Assistant. " +
+	"Answer questions based ONLY on the provided context and tools. " +
+	"DO NOT provide financial advice, stock recommendations, or investment picks. " +
+	"If asked for advice, state that you only provide data analysis. " +
+	"When asked about technical indicators, use the provided tools to fetch the exact numbers. " +
+	"Explain what these numbers traditionally signal to investors, but explicitly state " +
+	"you are not providing financial advice to buy or sell."
+
+// ErrAIDataEngineUnavailable is the user-facing error returned when the AI
+// pipeline can't service a request. Controllers map this to 503 with the
+// canonical message specified in the plan.
+var ErrAIDataEngineUnavailable = errors.New("the data engine is currently experiencing high load. Please try again in a moment.")
+
+// ChatMessage is the wire format used by both the HTTP API and the service.
+type ChatMessage struct {
+	Role    string `json:"role"`    // "user" | "assistant"
+	Content string `json:"content"`
+}
+
+// AIService orchestrates Gemini chat with tool-calling: RAG search and
+// technical-analysis lookups. It owns nothing concurrent; one Chat call =
+// one synchronous Gemini interaction (with up to 3 tool rounds).
+type AIService struct {
+	client       *ai.GeminiClient
+	rag          *ai.RAGService
+	ta           *ai.TechnicalAnalysisService
+	maxTurns     int
+	maxChars     int
+	maxToolRounds int
+}
+
+// NewAIService wires the chat client + tools. maxTurns and maxChars cap
+// how much history we ship per request; pass 0 to use sane defaults.
+func NewAIService(client *ai.GeminiClient, rag *ai.RAGService, ta *ai.TechnicalAnalysisService, maxTurns, maxChars int) *AIService {
+	if maxTurns <= 0 {
+		maxTurns = 12
+	}
+	if maxChars <= 0 {
+		maxChars = 16000
+	}
+	return &AIService{
+		client:        client,
+		rag:           rag,
+		ta:            ta,
+		maxTurns:      maxTurns,
+		maxChars:      maxChars,
+		maxToolRounds: 3,
+	}
+}
+
+// Configured reports whether the underlying Gemini client has an API key.
+// Controllers can fast-fail with the graceful error when this is false.
+func (s *AIService) Configured() bool {
+	return s != nil && s.client != nil && s.client.Configured()
+}
+
+// Chat runs one conversation turn. `history` includes the new user message
+// at the end. Returns the assistant's final text or ErrAIDataEngineUnavailable.
+func (s *AIService) Chat(ctx context.Context, history []ChatMessage) (string, error) {
+	if !s.Configured() {
+		return "", ErrAIDataEngineUnavailable
+	}
+
+	trimmed := truncateHistory(history, s.maxTurns, s.maxChars)
+	if len(trimmed) == 0 {
+		return "", errors.New("ai: empty history")
+	}
+
+	contents := make([]ai.GeminiContent, 0, len(trimmed))
+	for _, m := range trimmed {
+		switch strings.ToLower(strings.TrimSpace(m.Role)) {
+		case "user":
+			contents = append(contents, ai.NewUserContent(m.Content))
+		case "assistant", "model":
+			contents = append(contents, ai.NewModelContent(m.Content))
+		default:
+			// Unknown roles are treated as user — defensive default.
+			contents = append(contents, ai.NewUserContent(m.Content))
+		}
+	}
+
+	tools := s.buildTools()
+	req := ai.GeminiRequest{
+		SystemInstruction: ai.NewSystemInstruction(SystemPromptDataAssistant),
+		Contents:          contents,
+		Tools:             tools,
+	}
+
+	for round := 0; round <= s.maxToolRounds; round++ {
+		resp, err := s.client.GenerateContent(ctx, req)
+		if err != nil {
+			log.Printf("[ai] generateContent error: %v", err)
+			return "", ErrAIDataEngineUnavailable
+		}
+
+		calls := resp.FunctionCalls()
+		if len(calls) == 0 {
+			text := strings.TrimSpace(resp.Text())
+			if text == "" {
+				return "", ErrAIDataEngineUnavailable
+			}
+			return text, nil
+		}
+		if round == s.maxToolRounds {
+			// We've hit the tool-call cap; return whatever text the model
+			// produced alongside the calls, or the graceful error.
+			text := strings.TrimSpace(resp.Text())
+			if text != "" {
+				return text, nil
+			}
+			return "", ErrAIDataEngineUnavailable
+		}
+
+		// Echo the model's tool-call turn back into history, then append our
+		// function responses, then re-request.
+		req.Contents = append(req.Contents, resp.FirstCandidate().Content)
+		for _, call := range calls {
+			result := s.dispatchToolCall(ctx, call)
+			req.Contents = append(req.Contents, ai.NewFunctionResponseContent(call.Name, result))
+		}
+	}
+
+	return "", ErrAIDataEngineUnavailable
+}
+
+// dispatchToolCall routes a single tool call to the right service.
+// Errors are surfaced to the LLM as `{ "error": "..." }` so it can apologize
+// gracefully instead of failing the whole chat.
+func (s *AIService) dispatchToolCall(ctx context.Context, call ai.GeminiFunctionCall) map[string]interface{} {
+	switch call.Name {
+	case "SearchMarketData":
+		query, _ := call.Args["query"].(string)
+		hits, err := s.rag.SearchMarketData(ctx, query, 6)
+		if err != nil {
+			return map[string]interface{}{"error": err.Error()}
+		}
+		return map[string]interface{}{"results": hits, "count": len(hits)}
+
+	case "GetCompanyFundamentals":
+		ticker, _ := call.Args["ticker"].(string)
+		snap, err := s.rag.GetCompanyFundamentals(ctx, ticker)
+		if err != nil {
+			return map[string]interface{}{"error": err.Error()}
+		}
+		return map[string]interface{}{"fundamentals": snap}
+
+	case "GetTechnicalIndicators":
+		ticker, _ := call.Args["ticker"].(string)
+		indicator, _ := call.Args["indicator"].(string)
+		// JSON numbers decode to float64 in Go.
+		periodF, _ := call.Args["period"].(float64)
+		period := int(periodF)
+		res, err := s.ta.ComputeIndicator(ctx, ticker, indicator, period)
+		if err != nil {
+			return map[string]interface{}{"error": err.Error()}
+		}
+		return map[string]interface{}{"indicator": res}
+	}
+
+	return map[string]interface{}{"error": "unknown tool: " + call.Name}
+}
+
+// buildTools declares the function signatures the model is allowed to call.
+func (s *AIService) buildTools() []ai.GeminiTool {
+	return []ai.GeminiTool{{
+		FunctionDeclarations: []ai.GeminiFunctionDeclaration{
+			{
+				Name:        "SearchMarketData",
+				Description: "Semantic search over Ethiopian capital-markets corporate news and company profiles. Use this to retrieve relevant context before answering questions about specific companies, news, or sectors.",
+				Parameters: ai.GeminiSchema{
+					Type: "object",
+					Properties: map[string]ai.GeminiSchema{
+						"query": {Type: "string", Description: "A natural-language search query (e.g., 'CBE Q3 dividend announcement')."},
+					},
+					Required: []string{"query"},
+				},
+			},
+			{
+				Name:        "GetCompanyFundamentals",
+				Description: "Retrieve a structured snapshot of a single listed company by ticker: profile, latest financial reports, latest EPS, and board size.",
+				Parameters: ai.GeminiSchema{
+					Type: "object",
+					Properties: map[string]ai.GeminiSchema{
+						"ticker": {Type: "string", Description: "Ticker symbol on the Ethiopian Securities Exchange (e.g., 'CBE', 'AWBE')."},
+					},
+					Required: []string{"ticker"},
+				},
+			},
+			{
+				Name:        "GetTechnicalIndicators",
+				Description: "Compute a technical indicator for a ticker over its historical close prices. Use this whenever the user asks about technical signals such as moving averages, RSI, MACD, or Bollinger Bands.",
+				Parameters: ai.GeminiSchema{
+					Type: "object",
+					Properties: map[string]ai.GeminiSchema{
+						"ticker": {Type: "string", Description: "Ticker symbol."},
+						"indicator": {
+							Type:        "string",
+							Description: "Which indicator to compute.",
+							Enum:        ai.SupportedIndicators,
+						},
+						"period": {
+							Type:        "integer",
+							Description: "Window length. Defaults: SMA/Bollinger=20, EMA=12, RSI=14. Ignored for MACD (uses 12/26/9).",
+						},
+					},
+					Required: []string{"ticker", "indicator"},
+				},
+			},
+		},
+	}}
+}
+
+// truncateHistory keeps the most recent maxTurns messages, then drops oldest
+// messages (other than the very last one — the current user query) until the
+// total content size is at or below maxChars.
+func truncateHistory(history []ChatMessage, maxTurns, maxChars int) []ChatMessage {
+	if len(history) == 0 {
+		return nil
+	}
+	if maxTurns > 0 && len(history) > maxTurns {
+		history = history[len(history)-maxTurns:]
+	}
+	if maxChars <= 0 {
+		return append([]ChatMessage(nil), history...)
+	}
+
+	out := append([]ChatMessage(nil), history...)
+	total := 0
+	for _, m := range out {
+		total += len(m.Content)
+	}
+	for total > maxChars && len(out) > 1 {
+		total -= len(out[0].Content)
+		out = out[1:]
+	}
+	// If the single-remaining last message is itself larger than maxChars, hard-truncate it.
+	if len(out) == 1 && len(out[0].Content) > maxChars {
+		out[0].Content = out[0].Content[:maxChars]
+	}
+	return out
+}

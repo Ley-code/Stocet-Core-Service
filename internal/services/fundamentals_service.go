@@ -1,12 +1,15 @@
 package services
 
 import (
+	"context"
 	"errors"
+	"log"
 	"strings"
 	"time"
 
 	"stocet-core-service/internal/models"
 	"stocet-core-service/internal/repositories"
+	"stocet-core-service/internal/services/ai"
 	"stocet-core-service/internal/utils"
 
 	"gorm.io/datatypes"
@@ -15,12 +18,42 @@ import (
 
 // FundamentalsService contains business rules for company fundamentals data.
 // It does not perform authorization; callers enforce route-level auth (e.g. admin-only HTTP routes).
+//
+// embedder is optional: when non-nil, successful Create/Update on
+// corporate_news / company_profiles spawns a fire-and-forget goroutine that
+// generates and persists a Gemini embedding. This keeps admin HTTP requests
+// from blocking on the LLM API; failures are self-healed by the periodic
+// backfill worker (services/ai/backfill_worker.go).
 type FundamentalsService struct {
-	repo *repositories.FundamentalAnalysisRepository
+	repo     *repositories.FundamentalAnalysisRepository
+	embedder *ai.Embedder
 }
 
 func NewFundamentalsService(repo *repositories.FundamentalAnalysisRepository) *FundamentalsService {
 	return &FundamentalsService{repo: repo}
+}
+
+// WithEmbedder attaches an embedder for event-driven embedding writes.
+// Returns the same service for fluent setup in main.go.
+func (s *FundamentalsService) WithEmbedder(e *ai.Embedder) *FundamentalsService {
+	s.embedder = e
+	return s
+}
+
+// embedAsync spawns a background goroutine to embed `text` and store the
+// vector in `tableName.embedding` for the given primary key. It is a no-op
+// when no embedder is configured (e.g. GEMINI_API_KEY unset).
+func (s *FundamentalsService) embedAsync(tableName, id, text string) {
+	if s.embedder == nil || !s.embedder.Configured() || strings.TrimSpace(text) == "" || strings.TrimSpace(id) == "" {
+		return
+	}
+	go func(table, rowID, body string) {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		if err := s.embedder.GenerateAndSaveEmbedding(ctx, table, "id", rowID, body); err != nil {
+			log.Printf("[ai] embed %s id=%s failed: %v", table, rowID, err)
+		}
+	}(tableName, id, text)
 }
 
 // --- Input types (HTTP-agnostic) ---
@@ -99,7 +132,11 @@ func (s *FundamentalsService) CreateCompanyProfile(in CompanyProfileUpsert) (*mo
 	if err := s.repo.CreateCompanyProfile(m); err != nil {
 		return nil, err
 	}
-	return s.repo.GetCompanyProfileByTicker(m.TickerSymbol)
+	created, err := s.repo.GetCompanyProfileByTicker(m.TickerSymbol)
+	if err == nil && created != nil {
+		s.embedAsync("company_profiles", created.ID, ai.ComposeProfileText(created))
+	}
+	return created, err
 }
 
 func (s *FundamentalsService) UpdateCompanyProfile(id string, in CompanyProfileUpsert) (*models.CompanyProfile, error) {
@@ -126,7 +163,11 @@ func (s *FundamentalsService) UpdateCompanyProfile(id string, in CompanyProfileU
 	if err := s.repo.UpdateCompanyProfile(m); err != nil {
 		return nil, err
 	}
-	return s.repo.GetCompanyProfileByID(id)
+	updated, err := s.repo.GetCompanyProfileByID(id)
+	if err == nil && updated != nil {
+		s.embedAsync("company_profiles", updated.ID, ai.ComposeProfileText(updated))
+	}
+	return updated, err
 }
 
 func (s *FundamentalsService) DeleteCompanyProfile(id string) error {
@@ -287,7 +328,11 @@ func (s *FundamentalsService) CreateCorporateNews(companyProfileID string, in Co
 	if err := s.repo.CreateCorporateNews(m); err != nil {
 		return nil, err
 	}
-	return s.repo.GetCorporateNewsByID(m.ID)
+	created, err := s.repo.GetCorporateNewsByID(m.ID)
+	if err == nil && created != nil {
+		s.embedAsync("corporate_news", created.ID, ai.ComposeNewsText(created))
+	}
+	return created, err
 }
 
 func (s *FundamentalsService) UpdateCorporateNews(newsID string, in CorporateNewsUpsert) (*models.CorporateNews, error) {
@@ -314,7 +359,11 @@ func (s *FundamentalsService) UpdateCorporateNews(newsID string, in CorporateNew
 	if err := s.repo.UpdateCorporateNews(existing); err != nil {
 		return nil, err
 	}
-	return s.repo.GetCorporateNewsByID(newsID)
+	updated, err := s.repo.GetCorporateNewsByID(newsID)
+	if err == nil && updated != nil {
+		s.embedAsync("corporate_news", updated.ID, ai.ComposeNewsText(updated))
+	}
+	return updated, err
 }
 
 func (s *FundamentalsService) DeleteCorporateNews(newsID string) error {
