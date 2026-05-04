@@ -80,7 +80,7 @@ func LoadConfig() error {
 
 		GeminiAPIKey:          getEnv("GEMINI_API_KEY", ""),
 		GeminiChatModel:       getEnv("GEMINI_CHAT_MODEL", "gemini-1.5-flash"),
-		GeminiEmbedModel:      getEnv("GEMINI_EMBED_MODEL", "text-embedding-004"),
+		GeminiEmbedModel:      getEnv("GEMINI_EMBED_MODEL", "gemini-embedding-001"),
 		AIChatHistoryMaxTurns: getEnvInt("AI_CHAT_MAX_TURNS", 12),
 		AIChatHistoryMaxChars: getEnvInt("AI_CHAT_MAX_CHARS", 16000),
 		AIRequestTimeoutSec:   getEnvInt("AI_REQUEST_TIMEOUT_SEC", 25),

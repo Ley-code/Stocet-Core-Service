@@ -57,7 +57,7 @@ func (r *RAGService) SearchMarketData(ctx context.Context, query string, k int) 
 	}
 
 	// Reuse the same Embed flow as ingestion so retrieval and storage agree.
-	vec, err := r.embedder.Client().Embed(ctx, query)
+	vec, err := r.embedder.Client().Embed(ctx, query, EmbedTaskRetrievalQuery)
 	if err != nil {
 		return nil, err
 	}

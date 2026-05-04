@@ -27,6 +27,15 @@ var ErrGeminiUnavailable = errors.New("gemini api unavailable")
 
 const geminiBaseURL = "https://generativelanguage.googleapis.com/v1beta"
 
+// Embedding output size — must match PostgreSQL `vector(768)` in migration 000012.
+const EmbeddingDimensions = 768
+
+// Gemini embedContent task types (see ai.google.dev/api/embeddings#TaskType).
+const (
+	EmbedTaskRetrievalQuery    = "RETRIEVAL_QUERY"    // user search query (RAG)
+	EmbedTaskRetrievalDocument = "RETRIEVAL_DOCUMENT" // indexed news / profile text
+)
+
 // GeminiClient performs HTTP calls against the Gemini REST API.
 type GeminiClient struct {
 	apiKey     string
@@ -41,7 +50,9 @@ func NewGeminiClient(apiKey, chatModel, embedModel string, timeout time.Duration
 		chatModel = "gemini-1.5-flash"
 	}
 	if embedModel == "" {
-		embedModel = "text-embedding-004"
+		// text-embedding-004 is not available on v1beta embedContent for many keys;
+		// gemini-embedding-001 is the current GA model (see Google AI embeddings docs).
+		embedModel = "gemini-embedding-001"
 	}
 	if timeout <= 0 {
 		timeout = 25 * time.Second
@@ -69,8 +80,10 @@ func (c *GeminiClient) EmbedModel() string { return c.embedModel }
 // ----------------------------------------------------------------------------
 
 type embedRequest struct {
-	Model   string         `json:"model"`
-	Content embedRequestIn `json:"content"`
+	Model                  string         `json:"model"`
+	Content                embedRequestIn `json:"content"`
+	TaskType               string         `json:"taskType,omitempty"`
+	OutputDimensionality   int            `json:"outputDimensionality,omitempty"`
 }
 
 type embedRequestIn struct {
@@ -83,9 +96,11 @@ type embedResponse struct {
 	} `json:"embedding"`
 }
 
-// Embed returns the 768-dim embedding for the given text using text-embedding-004.
-// Empty input returns an error so callers don't silently store a zero vector.
-func (c *GeminiClient) Embed(ctx context.Context, text string) ([]float32, error) {
+// Embed returns a vector of length EmbeddingDimensions (768) for PostgreSQL.
+// taskType should be EmbedTaskRetrievalQuery for user queries and
+// EmbedTaskRetrievalDocument for corpus rows (news/profiles). Pass "" to omit
+// taskType (not recommended).
+func (c *GeminiClient) Embed(ctx context.Context, text string, taskType string) ([]float32, error) {
 	text = strings.TrimSpace(text)
 	if text == "" {
 		return nil, errors.New("embed: empty text")
@@ -95,10 +110,10 @@ func (c *GeminiClient) Embed(ctx context.Context, text string) ([]float32, error
 	}
 
 	body := embedRequest{
-		Model: "models/" + c.embedModel,
-		Content: embedRequestIn{
-			Parts: []geminiPart{{Text: text}},
-		},
+		Model:                "models/" + c.embedModel,
+		Content:              embedRequestIn{Parts: []geminiPart{{Text: text}}},
+		OutputDimensionality: EmbeddingDimensions,
+		TaskType:             strings.TrimSpace(taskType),
 	}
 	url := fmt.Sprintf("%s/models/%s:embedContent?key=%s", geminiBaseURL, c.embedModel, c.apiKey)
 

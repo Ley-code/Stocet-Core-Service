@@ -48,12 +48,20 @@ func StartBackfillWorker(ctx context.Context, embedder *Embedder, interval time.
 	}
 }
 
+// BackfillStats counts rows successfully embedded in a single RunBackfillOnce
+// pass (one batch per table).
+type BackfillStats struct {
+	CorporateNewsRows   int
+	CompanyProfilesRows int
+}
+
 // RunBackfillOnce processes one batch each from corporate_news and
 // company_profiles. Errors are logged, never propagated — the loop is
-// best-effort.
-func RunBackfillOnce(ctx context.Context, embedder *Embedder, batchSize int) {
+// best-effort. Returns how many rows were embedded per table.
+func RunBackfillOnce(ctx context.Context, embedder *Embedder, batchSize int) BackfillStats {
+	var stats BackfillStats
 	if embedder == nil || !embedder.Configured() {
-		return
+		return stats
 	}
 	if batchSize <= 0 {
 		batchSize = 25
@@ -61,15 +69,22 @@ func RunBackfillOnce(ctx context.Context, embedder *Embedder, batchSize int) {
 
 	if n, err := backfillCorporateNews(ctx, embedder, batchSize); err != nil {
 		log.Printf("[ai] backfill corporate_news: %v", err)
-	} else if n > 0 {
-		log.Printf("[ai] backfill corporate_news: embedded %d rows", n)
+	} else {
+		stats.CorporateNewsRows = n
+		if n > 0 {
+			log.Printf("[ai] backfill corporate_news: embedded %d rows", n)
+		}
 	}
 
 	if n, err := backfillCompanyProfiles(ctx, embedder, batchSize); err != nil {
 		log.Printf("[ai] backfill company_profiles: %v", err)
-	} else if n > 0 {
-		log.Printf("[ai] backfill company_profiles: embedded %d rows", n)
+	} else {
+		stats.CompanyProfilesRows = n
+		if n > 0 {
+			log.Printf("[ai] backfill company_profiles: embedded %d rows", n)
+		}
 	}
+	return stats
 }
 
 func backfillCorporateNews(ctx context.Context, e *Embedder, batch int) (int, error) {

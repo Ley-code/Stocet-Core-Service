@@ -113,6 +113,7 @@ func SetupRouter() *gin.Engine {
 	dashboardController := controllers.NewDashboardController(dashboardService)
 	adminController := controllers.NewAdminController(userRepo)
 	fundamentalsController := controllers.NewFundamentalsController(fundamentalsService)
+	embeddingsAdminController := controllers.NewEmbeddingsAdminController(embedder)
 	watchlistController := controllers.NewWatchlistController(watchlistService)
 	aiController := controllers.NewAIController(aiService)
 
@@ -144,7 +145,7 @@ func SetupRouter() *gin.Engine {
 		routes.SetupNotificationsRoutes(api, notificationsController)
 		routes.SetupAnalyticsRoutes(api, analyticsController)
 		routes.SetupDashboardRoutes(api, dashboardController)
-		routes.SetupAdminRoutes(api, adminController, fundamentalsController)
+		routes.SetupAdminRoutes(api, adminController, fundamentalsController, embeddingsAdminController)
 		routes.SetupFundamentalsPublicRoutes(api, fundamentalsController)
 		routes.SetupWatchlistRoutes(api, watchlistController)
 		routes.SetupAIRoutes(api, aiController)

@@ -7,7 +7,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetupAdminRoutes(router *gin.RouterGroup, adminController *controllers.AdminController, fundamentalsController *controllers.FundamentalsController) {
+func SetupAdminRoutes(router *gin.RouterGroup, adminController *controllers.AdminController, fundamentalsController *controllers.FundamentalsController, embeddingsAdmin *controllers.EmbeddingsAdminController) {
 	admin := router.Group("/admin", middleware.AuthMiddleware(), middleware.RequireAdmin())
 	{
 		admin.GET("/users", adminController.ListUsers)
@@ -16,5 +16,8 @@ func SetupAdminRoutes(router *gin.RouterGroup, adminController *controllers.Admi
 	}
 	if fundamentalsController != nil {
 		RegisterFundamentalsRoutes(admin, fundamentalsController)
+	}
+	if embeddingsAdmin != nil {
+		admin.POST("/ai/embeddings/backfill", embeddingsAdmin.RunBackfill)
 	}
 }

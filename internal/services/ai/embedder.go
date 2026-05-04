@@ -62,7 +62,7 @@ func (e *Embedder) GenerateAndSaveEmbedding(ctx context.Context, tableName, idCo
 		return errors.New("embedder: empty text")
 	}
 
-	vec, err := e.client.Embed(ctx, textToEmbed)
+	vec, err := e.client.Embed(ctx, textToEmbed, EmbedTaskRetrievalDocument)
 	if err != nil {
 		return err
 	}
