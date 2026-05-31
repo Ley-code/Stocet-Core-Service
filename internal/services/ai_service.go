@@ -13,13 +13,25 @@ import (
 // SystemPromptDataAssistant is the strict, hardcoded system prompt for the
 // Stocet Data Assistant. Any change to this string is a behavioural change
 // for every conversation, so we keep it in code (not config).
-const SystemPromptDataAssistant = "You are the Stocet Data Assistant. " +
-	"Answer questions based ONLY on the provided context and tools. " +
-	"DO NOT provide financial advice, stock recommendations, or investment picks. " +
-	"If asked for advice, state that you only provide data analysis. " +
-	"When asked about technical indicators, use the provided tools to fetch the exact numbers. " +
-	"Explain what these numbers traditionally signal to investors, but explicitly state " +
-	"you are not providing financial advice to buy or sell."
+const SystemPromptDataAssistant = `You are the Stocet Data Assistant — an AI analyst for the Ethiopian Securities Exchange (ESX).
+
+CONTEXT: The ESX is Ethiopia's securities exchange, launched in 2024. Listed companies include Ethiopian banks (CBE, Awash, Abyssinia, Dashen, etc.), insurance companies, and selected industrials. Tickers are 2–6 uppercase characters.
+
+TOOLS AVAILABLE — always call them before answering data questions. Never guess numbers.
+• SearchMarketData — semantic search over corporate news and company profiles
+• GetCompanyFundamentals — structured financial snapshot (financials, EPS, board size)
+• GetTechnicalIndicators — SMA, EMA, RSI, MACD, Bollinger Bands on price history
+• GetMarketPrice — latest quoted price and day change for a single ticker
+• GetRecentNews — most recent corporate announcements, optionally filtered by ticker
+• GetMarketSummary — today's ESX market overview: top gainers and losers
+
+RULES:
+1. ALWAYS use a tool to fetch data before answering. Never cite prices or statistics from memory.
+2. Do NOT provide investment advice, buy/sell recommendations, or portfolio suggestions. If asked, state you only provide data analysis.
+3. When you cite a number, reference where it came from (e.g., "Per the 2023 annual report…").
+4. Format for a terminal: use markdown tables for comparisons, bullet points for lists. Be concise.
+5. When asked about a specific company, call both GetCompanyFundamentals and GetRecentNews before answering.
+6. End with one short disclaimer only if you discussed financial figures. Never repeat disclaimers.`
 
 // ErrAIDataEngineUnavailable is the user-facing error returned when the AI
 // pipeline can't service a request. Controllers map this to 503 with the
@@ -167,6 +179,115 @@ func (s *AIService) Chat(ctx context.Context, history []ChatMessage) (string, er
 	return "", ErrAIDataEngineUnavailable
 }
 
+// StreamEventKind enumerates the SSE event types emitted by ChatStream.
+type StreamEventKind string
+
+const (
+	StreamEventTool  StreamEventKind = "tool"
+	StreamEventText  StreamEventKind = "text"
+	StreamEventError StreamEventKind = "error"
+)
+
+// StreamEvent is one SSE payload emitted by ChatStream.
+type StreamEvent struct {
+	Event  StreamEventKind `json:"event"`
+	Tool   string          `json:"tool,omitempty"`   // tool events
+	Status string          `json:"status,omitempty"` // "start" | "done"
+	Text   string          `json:"text,omitempty"`   // text event
+	Error  string          `json:"error,omitempty"`  // error event
+}
+
+// StreamEmitter is the callback ChatStream uses to push events to the HTTP layer.
+type StreamEmitter func(StreamEvent)
+
+// ChatStream behaves like Chat but emits progress events (tool start/done) and
+// the final text via the supplied emitter. This enables real-time SSE streaming
+// on the HTTP layer without needing the Gemini streaming API.
+func (s *AIService) ChatStream(ctx context.Context, history []ChatMessage, emit StreamEmitter) error {
+	if !s.Configured() {
+		emit(StreamEvent{Event: StreamEventError, Error: ErrAIDataEngineUnavailable.Error()})
+		return ErrAIDataEngineUnavailable
+	}
+
+	trimmed := truncateHistory(history, s.maxTurns, s.maxChars)
+	if len(trimmed) == 0 {
+		emit(StreamEvent{Event: StreamEventError, Error: "empty history"})
+		return errors.New("ai: empty history")
+	}
+
+	contents := make([]ai.GeminiContent, 0, len(trimmed))
+	for _, m := range trimmed {
+		switch strings.ToLower(strings.TrimSpace(m.Role)) {
+		case "user":
+			contents = append(contents, ai.NewUserContent(m.Content))
+		case "assistant", "model":
+			contents = append(contents, ai.NewModelContent(m.Content))
+		default:
+			contents = append(contents, ai.NewUserContent(m.Content))
+		}
+	}
+
+	tools := s.buildTools()
+	req := ai.GeminiRequest{
+		SystemInstruction: ai.NewSystemInstruction(SystemPromptDataAssistant),
+		Contents:          contents,
+		Tools:             tools,
+	}
+
+	for round := 0; round <= s.maxToolRounds; round++ {
+		resp, err := s.client.GenerateContent(ctx, req)
+		if err != nil {
+			log.Printf("[ai][stream] generateContent_failed round=%d err=%v", round, err)
+			emit(StreamEvent{Event: StreamEventError, Error: ErrAIDataEngineUnavailable.Error()})
+			return ErrAIDataEngineUnavailable
+		}
+
+		calls := resp.FunctionCalls()
+		if len(calls) == 0 {
+			text := strings.TrimSpace(resp.Text())
+			if text == "" {
+				log.Printf("[ai][stream] empty_model_text round=%d", round)
+				emit(StreamEvent{Event: StreamEventError, Error: ErrAIDataEngineUnavailable.Error()})
+				return ErrAIDataEngineUnavailable
+			}
+			log.Printf("[ai][stream] complete round=%d text_chars=%d", round, len(text))
+			emit(StreamEvent{Event: StreamEventText, Text: text})
+			return nil
+		}
+
+		if round == s.maxToolRounds {
+			text := strings.TrimSpace(resp.Text())
+			if text != "" {
+				emit(StreamEvent{Event: StreamEventText, Text: text})
+				return nil
+			}
+			emit(StreamEvent{Event: StreamEventError, Error: ErrAIDataEngineUnavailable.Error()})
+			return ErrAIDataEngineUnavailable
+		}
+
+		fc := resp.FirstCandidate()
+		if fc == nil {
+			emit(StreamEvent{Event: StreamEventError, Error: ErrAIDataEngineUnavailable.Error()})
+			return ErrAIDataEngineUnavailable
+		}
+		req.Contents = append(req.Contents, fc.Content)
+
+		for _, call := range calls {
+			log.Printf("[ai][stream][tool] round=%d name=%s status=start", round, call.Name)
+			emit(StreamEvent{Event: StreamEventTool, Tool: call.Name, Status: "start"})
+			result := s.dispatchToolCall(ctx, call)
+			if errVal, ok := result["error"].(string); ok && errVal != "" {
+				log.Printf("[ai][stream][tool] round=%d name=%s tool_error=%q", round, call.Name, errVal)
+			}
+			emit(StreamEvent{Event: StreamEventTool, Tool: call.Name, Status: "done"})
+			req.Contents = append(req.Contents, ai.NewFunctionResponseContent(call.Name, result))
+		}
+	}
+
+	emit(StreamEvent{Event: StreamEventError, Error: ErrAIDataEngineUnavailable.Error()})
+	return ErrAIDataEngineUnavailable
+}
+
 // summarizeGeminiResponse builds a short, log-safe summary when the model
 // returns no text (blocked, malformed, or empty candidates).
 func summarizeGeminiResponse(resp *ai.GeminiResponse) string {
@@ -214,6 +335,31 @@ func (s *AIService) dispatchToolCall(ctx context.Context, call ai.GeminiFunction
 			return map[string]interface{}{"error": err.Error()}
 		}
 		return map[string]interface{}{"indicator": res}
+
+	case "GetMarketPrice":
+		ticker, _ := call.Args["ticker"].(string)
+		result, err := s.rag.GetLatestPrice(ctx, ticker)
+		if err != nil {
+			return map[string]interface{}{"error": err.Error()}
+		}
+		return map[string]interface{}{"price": result}
+
+	case "GetRecentNews":
+		ticker, _ := call.Args["ticker"].(string)
+		limitF, _ := call.Args["limit"].(float64)
+		limit := int(limitF)
+		results, err := s.rag.GetRecentNews(ctx, ticker, limit)
+		if err != nil {
+			return map[string]interface{}{"error": err.Error()}
+		}
+		return map[string]interface{}{"news": results, "count": len(results)}
+
+	case "GetMarketSummary":
+		summary, err := s.rag.GetMarketSummary(ctx)
+		if err != nil {
+			return map[string]interface{}{"error": err.Error()}
+		}
+		return map[string]interface{}{"summary": summary}
 	}
 
 	return map[string]interface{}{"error": "unknown tool: " + call.Name}
@@ -263,6 +409,36 @@ func (s *AIService) buildTools() []ai.GeminiTool {
 						},
 					},
 					Required: []string{"ticker", "indicator"},
+				},
+			},
+			{
+				Name:        "GetMarketPrice",
+				Description: "Get the latest quoted price, daily percent change, and variation for a specific ticker on the ESX. Use this whenever the user asks about the current or recent price of a company.",
+				Parameters: ai.GeminiSchema{
+					Type: "object",
+					Properties: map[string]ai.GeminiSchema{
+						"ticker": {Type: "string", Description: "Ticker symbol (e.g., 'CBE', 'AWBE')."},
+					},
+					Required: []string{"ticker"},
+				},
+			},
+			{
+				Name:        "GetRecentNews",
+				Description: "Fetch the most recent corporate news and announcements from the ESX. Optionally filter by ticker. Use this when the user asks about recent events, announcements, or news for a company or the market broadly.",
+				Parameters: ai.GeminiSchema{
+					Type: "object",
+					Properties: map[string]ai.GeminiSchema{
+						"ticker": {Type: "string", Description: "Ticker symbol to filter news. Leave empty for all recent ESX news."},
+						"limit":  {Type: "integer", Description: "Number of news items to return (1–15, default 8)."},
+					},
+				},
+			},
+			{
+				Name:        "GetMarketSummary",
+				Description: "Get today's ESX market overview: top 5 gainers and top 5 losers by percent change, plus total number of listed tickers. Use this when the user asks how the market is doing, what moved today, or wants a market overview.",
+				Parameters: ai.GeminiSchema{
+					Type:       "object",
+					Properties: map[string]ai.GeminiSchema{},
 				},
 			},
 		},

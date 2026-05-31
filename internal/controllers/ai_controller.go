@@ -2,7 +2,9 @@ package controllers
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"log"
 	"net/http"
 	"strings"
@@ -110,6 +112,77 @@ func (c *AIController) Chat(ctx *gin.Context) {
 			"content": answer,
 		},
 	}, "")
+}
+
+// ChatStream handles POST /ai/chat/stream. It validates the request identically
+// to Chat, then emits SSE events: tool progress + the final text response.
+func (c *AIController) ChatStream(ctx *gin.Context) {
+	if c.svc == nil || !c.svc.Configured() {
+		log.Printf("[ai][stream] 503 client_ip=%s reason=not_configured", ctx.ClientIP())
+		ctx.JSON(http.StatusServiceUnavailable, gin.H{"error": gracefulErrorMessage})
+		return
+	}
+
+	var req chatRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(ctx, "Invalid request body")
+		return
+	}
+	if len(req.Messages) == 0 {
+		utils.BadRequest(ctx, "messages must contain at least one entry")
+		return
+	}
+	for i, m := range req.Messages {
+		role := strings.ToLower(strings.TrimSpace(m.Role))
+		if role != "user" && role != "assistant" {
+			utils.BadRequest(ctx, "messages[].role must be 'user' or 'assistant'")
+			return
+		}
+		req.Messages[i].Role = role
+		req.Messages[i].Content = strings.TrimSpace(m.Content)
+		if req.Messages[i].Content == "" {
+			utils.BadRequest(ctx, "messages[].content must not be empty")
+			return
+		}
+		if len(req.Messages[i].Content) > maxMessageContentChars {
+			utils.BadRequest(ctx, "messages[].content exceeds maximum length")
+			return
+		}
+	}
+	if req.Messages[len(req.Messages)-1].Role != "user" {
+		utils.BadRequest(ctx, "the last message must be from the user")
+		return
+	}
+
+	flusher, ok := ctx.Writer.(http.Flusher)
+	if !ok {
+		ctx.JSON(http.StatusInternalServerError, gin.H{"error": "streaming not supported"})
+		return
+	}
+
+	ctx.Header("Content-Type", "text/event-stream")
+	ctx.Header("Cache-Control", "no-cache")
+	ctx.Header("X-Accel-Buffering", "no")
+	ctx.Header("Connection", "keep-alive")
+
+	log.Printf("[ai][stream] start client_ip=%s messages=%d", ctx.ClientIP(), len(req.Messages))
+
+	callCtx, cancel := context.WithTimeout(ctx.Request.Context(), 90*time.Second)
+	defer cancel()
+
+	w := ctx.Writer
+	emit := func(event services.StreamEvent) {
+		data, _ := json.Marshal(event)
+		fmt.Fprintf(w, "data: %s\n\n", data)
+		flusher.Flush()
+	}
+
+	if err := c.svc.ChatStream(callCtx, req.Messages, emit); err != nil {
+		log.Printf("[ai][stream] error client_ip=%s err=%v", ctx.ClientIP(), err)
+	}
+
+	fmt.Fprintf(w, "data: [DONE]\n\n")
+	flusher.Flush()
 }
 
 // respondGraceful renders the canonical 503 body the frontend renders inline.

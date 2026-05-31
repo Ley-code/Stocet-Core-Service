@@ -236,3 +236,177 @@ func (r *RAGService) GetCompanyFundamentals(ctx context.Context, ticker string) 
 
 // Helper exposed for tests / sanity checks.
 var _ = models.CorporateNews{}
+
+// NewsHit is a recent corporate news item returned to the LLM.
+type NewsHit struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Category    string `json:"category"`
+	Snippet     string `json:"snippet,omitempty"`
+	PublishedAt string `json:"published_at"`
+	Ticker      string `json:"ticker,omitempty"`
+	CompanyName string `json:"company_name,omitempty"`
+}
+
+// GetRecentNews returns the most recent corporate news items, optionally
+// filtered to a specific ticker. limit is capped at 15.
+func (r *RAGService) GetRecentNews(ctx context.Context, ticker string, limit int) ([]NewsHit, error) {
+	if limit <= 0 || limit > 15 {
+		limit = 8
+	}
+	ticker = strings.TrimSpace(strings.ToUpper(ticker))
+
+	type row struct {
+		ID           string
+		Title        string
+		Category     string
+		Body         *string
+		PublishedAt  time.Time
+		TickerSymbol string `gorm:"column:ticker_symbol"`
+		CompanyName  string `gorm:"column:company_name"`
+	}
+	var rows []row
+
+	if ticker != "" {
+		if err := r.db.WithContext(ctx).Raw(`
+			SELECT cn.id, cn.title, cn.category, cn.body, cn.published_at,
+			       cp.ticker_symbol, cp.company_name
+			FROM corporate_news cn
+			JOIN company_profiles cp ON cn.company_profile_id = cp.id
+			WHERE cp.ticker_symbol = ?
+			ORDER BY cn.published_at DESC
+			LIMIT ?
+		`, ticker, limit).Scan(&rows).Error; err != nil {
+			return nil, fmt.Errorf("rag: recent news by ticker: %w", err)
+		}
+	} else {
+		if err := r.db.WithContext(ctx).Raw(`
+			SELECT cn.id, cn.title, cn.category, cn.body, cn.published_at,
+			       cp.ticker_symbol, cp.company_name
+			FROM corporate_news cn
+			LEFT JOIN company_profiles cp ON cn.company_profile_id = cp.id
+			ORDER BY cn.published_at DESC
+			LIMIT ?
+		`, limit).Scan(&rows).Error; err != nil {
+			return nil, fmt.Errorf("rag: recent news: %w", err)
+		}
+	}
+
+	hits := make([]NewsHit, 0, len(rows))
+	for _, row := range rows {
+		body := ""
+		if row.Body != nil {
+			body = strings.TrimSpace(*row.Body)
+		}
+		hits = append(hits, NewsHit{
+			ID:          row.ID,
+			Title:       row.Title,
+			Category:    row.Category,
+			Snippet:     truncate(body, 500),
+			PublishedAt: row.PublishedAt.UTC().Format(time.RFC3339),
+			Ticker:      row.TickerSymbol,
+			CompanyName: row.CompanyName,
+		})
+	}
+	return hits, nil
+}
+
+// LatestPriceResult is the latest quoted price for one ticker.
+type LatestPriceResult struct {
+	Ticker        string  `json:"ticker"`
+	Price         float64 `json:"price"`
+	PercentChange float64 `json:"percent_change"`
+	Variation     float64 `json:"variation"`
+	Timestamp     string  `json:"timestamp"`
+}
+
+// GetLatestPrice returns the most recent price record for a ticker.
+func (r *RAGService) GetLatestPrice(ctx context.Context, ticker string) (*LatestPriceResult, error) {
+	ticker = strings.TrimSpace(strings.ToUpper(ticker))
+	if ticker == "" {
+		return nil, errors.New("rag: empty ticker")
+	}
+
+	type row struct {
+		TickerSymbol  string    `gorm:"column:ticker_symbol"`
+		Price         float64   `gorm:"column:price"`
+		PercentChange float64   `gorm:"column:percent_change"`
+		Variation     float64   `gorm:"column:variation"`
+		Timestamp     time.Time `gorm:"column:timestamp"`
+	}
+	var r2 row
+	if err := r.db.WithContext(ctx).Raw(`
+		SELECT ticker_symbol, price, percent_change, variation, timestamp
+		FROM market_prices
+		WHERE ticker_symbol = ?
+		ORDER BY timestamp DESC
+		LIMIT 1
+	`, ticker).Scan(&r2).Error; err != nil {
+		return nil, fmt.Errorf("rag: price lookup: %w", err)
+	}
+	if r2.TickerSymbol == "" {
+		return nil, fmt.Errorf("rag: no price data for ticker %q", ticker)
+	}
+	return &LatestPriceResult{
+		Ticker:        r2.TickerSymbol,
+		Price:         r2.Price,
+		PercentChange: r2.PercentChange,
+		Variation:     r2.Variation,
+		Timestamp:     r2.Timestamp.UTC().Format(time.RFC3339),
+	}, nil
+}
+
+// MarketSummaryResult holds the ESX market overview for the LLM.
+type MarketSummaryResult struct {
+	TopGainers   []LatestPriceResult `json:"top_gainers"`
+	TopLosers    []LatestPriceResult `json:"top_losers"`
+	TotalTickers int                 `json:"total_tickers"`
+}
+
+// GetMarketSummary returns the ESX market overview: top 5 gainers, top 5 losers.
+func (r *RAGService) GetMarketSummary(ctx context.Context) (*MarketSummaryResult, error) {
+	type row struct {
+		TickerSymbol  string    `gorm:"column:ticker_symbol"`
+		Price         float64   `gorm:"column:price"`
+		PercentChange float64   `gorm:"column:percent_change"`
+		Variation     float64   `gorm:"column:variation"`
+		Timestamp     time.Time `gorm:"column:timestamp"`
+	}
+	var rows []row
+	if err := r.db.WithContext(ctx).Raw(`
+		SELECT DISTINCT ON (ticker_symbol) ticker_symbol, price, percent_change, variation, timestamp
+		FROM market_prices
+		ORDER BY ticker_symbol, timestamp DESC
+	`).Scan(&rows).Error; err != nil {
+		return nil, fmt.Errorf("rag: market summary: %w", err)
+	}
+
+	all := make([]LatestPriceResult, 0, len(rows))
+	for _, row := range rows {
+		all = append(all, LatestPriceResult{
+			Ticker:        row.TickerSymbol,
+			Price:         row.Price,
+			PercentChange: row.PercentChange,
+			Variation:     row.Variation,
+			Timestamp:     row.Timestamp.UTC().Format(time.RFC3339),
+		})
+	}
+
+	gainers := append([]LatestPriceResult(nil), all...)
+	sort.Slice(gainers, func(i, j int) bool { return gainers[i].PercentChange > gainers[j].PercentChange })
+	if len(gainers) > 5 {
+		gainers = gainers[:5]
+	}
+
+	losers := append([]LatestPriceResult(nil), all...)
+	sort.Slice(losers, func(i, j int) bool { return losers[i].PercentChange < losers[j].PercentChange })
+	if len(losers) > 5 {
+		losers = losers[:5]
+	}
+
+	return &MarketSummaryResult{
+		TopGainers:   gainers,
+		TopLosers:    losers,
+		TotalTickers: len(all),
+	}, nil
+}

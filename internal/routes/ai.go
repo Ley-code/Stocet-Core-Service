@@ -16,5 +16,6 @@ func SetupAIRoutes(router *gin.RouterGroup, controller *controllers.AIController
 	ai := router.Group("/ai", middleware.AuthMiddleware())
 	{
 		ai.POST("/chat", controller.Chat)
+		ai.POST("/chat/stream", controller.ChatStream)
 	}
 }
