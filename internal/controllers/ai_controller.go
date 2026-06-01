@@ -30,8 +30,10 @@ func NewAIController(svc *services.AIService) *AIController {
 }
 
 // chatRequest is the wire payload for POST /ai/chat.
+// Mode "advisory" switches to the portfolio guidance system prompt.
 type chatRequest struct {
 	Messages []services.ChatMessage `json:"messages"`
+	Mode     string                 `json:"mode,omitempty"` // "" | "advisory"
 }
 
 // gracefulErrorMessage is the canonical user-facing error per the plan.
@@ -97,7 +99,7 @@ func (c *AIController) Chat(ctx *gin.Context) {
 	callCtx, cancel := context.WithTimeout(ctx.Request.Context(), 60*time.Second)
 	defer cancel()
 
-	answer, err := c.svc.Chat(callCtx, req.Messages)
+	answer, err := c.svc.Chat(callCtx, req.Messages, req.Mode)
 	if err != nil {
 		engine := errors.Is(err, services.ErrAIDataEngineUnavailable)
 		log.Printf("[ai][chat] 503 client_ip=%s messages=%d err=%q is_engine_unavailable=%v", ctx.ClientIP(), msgCount, err.Error(), engine)
@@ -177,7 +179,7 @@ func (c *AIController) ChatStream(ctx *gin.Context) {
 		flusher.Flush()
 	}
 
-	if err := c.svc.ChatStream(callCtx, req.Messages, emit); err != nil {
+	if err := c.svc.ChatStream(callCtx, req.Messages, req.Mode, emit); err != nil {
 		log.Printf("[ai][stream] error client_ip=%s err=%v", ctx.ClientIP(), err)
 	}
 

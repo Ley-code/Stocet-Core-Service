@@ -33,6 +33,47 @@ RULES:
 5. When asked about a specific company, call both GetCompanyFundamentals and GetRecentNews before answering.
 6. End with one short disclaimer only if you discussed financial figures. Never repeat disclaimers.`
 
+// SystemPromptAdvisory is used exclusively for the Robo Advisory feature.
+// It explicitly allows portfolio allocation guidance, unlike the default analyst prompt.
+const SystemPromptAdvisory = `You are the Stocet Portfolio Advisor — an AI-powered portfolio guidance assistant for the Ethiopian Securities Exchange (ESX).
+
+CONTEXT: The ESX launched in 2024. Listed companies include Ethiopian banks (CBE, Awash, Abyssinia, Dashen, etc.), insurance companies, and selected industrials. Tickers are 2–6 uppercase characters. There are approximately 20 listed securities.
+
+TOOLS AVAILABLE — use them before forming any recommendation:
+• GetMarketSummary — today's ESX market state: top gainers/losers
+• GetCompanyFundamentals — financial snapshot for a company (financials, EPS, board)
+• GetMarketPrice — latest price and day change for a ticker
+• GetRecentNews — latest corporate announcements
+
+YOUR TASK: Provide educational portfolio allocation guidance based on the user's risk profile. You MUST:
+1. Call GetMarketSummary first to see current market conditions
+2. Call GetCompanyFundamentals for the most relevant ESX companies
+3. Call GetMarketPrice for companies you plan to include
+4. Output a structured allocation table followed by rationale, risks, and getting-started advice
+
+OUTPUT FORMAT — follow this exactly:
+## Portfolio Allocation
+| Ticker | Company | Allocation % | Rationale |
+|--------|---------|-------------|-----------|
+
+## Investment Thesis
+[2–3 sentences]
+
+## Key Risks
+[3 bullet points]
+
+## Getting Started
+[1–2 sentences on executing through a Capital Market Service Provider (CMSP)]
+
+---
+*This is educational analysis based on publicly available ESX data. It does not constitute financial advice. Consult a licensed investment advisor before making investment decisions.*
+
+RULES:
+- Base every recommendation on data fetched from tools. Never guess prices or fundamentals.
+- Tailor allocations to the user's stated risk profile, horizon, and goal.
+- Keep total allocations to 100%.
+- Include a mix of securities appropriate for the profile (conservative = stable banks; aggressive = growth-oriented).`
+
 // ErrAIDataEngineUnavailable is the user-facing error returned when the AI
 // pipeline can't service a request. Controllers map this to 503 with the
 // canonical message specified in the plan.
@@ -83,7 +124,14 @@ func (s *AIService) Configured() bool {
 
 // Chat runs one conversation turn. `history` includes the new user message
 // at the end. Returns the assistant's final text or ErrAIDataEngineUnavailable.
-func (s *AIService) Chat(ctx context.Context, history []ChatMessage) (string, error) {
+func systemPromptForMode(mode string) string {
+	if mode == "advisory" {
+		return SystemPromptAdvisory
+	}
+	return SystemPromptDataAssistant
+}
+
+func (s *AIService) Chat(ctx context.Context, history []ChatMessage, mode string) (string, error) {
 	if !s.Configured() {
 		return "", ErrAIDataEngineUnavailable
 	}
@@ -116,7 +164,7 @@ func (s *AIService) Chat(ctx context.Context, history []ChatMessage) (string, er
 
 	tools := s.buildTools()
 	req := ai.GeminiRequest{
-		SystemInstruction: ai.NewSystemInstruction(SystemPromptDataAssistant),
+		SystemInstruction: ai.NewSystemInstruction(systemPromptForMode(mode)),
 		Contents:          contents,
 		Tools:             tools,
 	}
@@ -203,7 +251,7 @@ type StreamEmitter func(StreamEvent)
 // ChatStream behaves like Chat but emits progress events (tool start/done) and
 // the final text via the supplied emitter. This enables real-time SSE streaming
 // on the HTTP layer without needing the Gemini streaming API.
-func (s *AIService) ChatStream(ctx context.Context, history []ChatMessage, emit StreamEmitter) error {
+func (s *AIService) ChatStream(ctx context.Context, history []ChatMessage, mode string, emit StreamEmitter) error {
 	if !s.Configured() {
 		emit(StreamEvent{Event: StreamEventError, Error: ErrAIDataEngineUnavailable.Error()})
 		return ErrAIDataEngineUnavailable
@@ -229,7 +277,7 @@ func (s *AIService) ChatStream(ctx context.Context, history []ChatMessage, emit 
 
 	tools := s.buildTools()
 	req := ai.GeminiRequest{
-		SystemInstruction: ai.NewSystemInstruction(SystemPromptDataAssistant),
+		SystemInstruction: ai.NewSystemInstruction(systemPromptForMode(mode)),
 		Contents:          contents,
 		Tools:             tools,
 	}
