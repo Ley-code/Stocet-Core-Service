@@ -47,6 +47,10 @@ type Config struct {
 	AIRequestTimeoutSec   int
 	AIBackfillIntervalSec int
 	AIBackfillBatchSize   int
+
+	// Firebase Cloud Messaging (push notifications — HTTP v1 API)
+	FCMProjectID          string
+	FCMServiceAccountJSON string
 }
 
 var AppConfig *Config
@@ -86,6 +90,9 @@ func LoadConfig() error {
 		AIRequestTimeoutSec:   getEnvInt("AI_REQUEST_TIMEOUT_SEC", 25),
 		AIBackfillIntervalSec: getEnvInt("AI_BACKFILL_INTERVAL_SEC", 300),
 		AIBackfillBatchSize:   getEnvInt("AI_BACKFILL_BATCH_SIZE", 25),
+
+		FCMProjectID:          getEnv("FCM_PROJECT_ID", ""),
+		FCMServiceAccountJSON: getEnv("FCM_SERVICE_ACCOUNT_JSON", ""),
 	}
 
 	if AppConfig.JWTSecret == "change-me-in-production" && AppConfig.Environment == "production" {

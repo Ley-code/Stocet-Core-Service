@@ -7,12 +7,25 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetupAdminRoutes(router *gin.RouterGroup, adminController *controllers.AdminController, fundamentalsController *controllers.FundamentalsController, embeddingsAdmin *controllers.EmbeddingsAdminController) {
+func SetupAdminRoutes(
+	router *gin.RouterGroup,
+	adminController *controllers.AdminController,
+	inviteCodesController *controllers.InviteCodesAdminController,
+	fundamentalsController *controllers.FundamentalsController,
+	embeddingsAdmin *controllers.EmbeddingsAdminController,
+) {
 	admin := router.Group("/admin", middleware.AuthMiddleware(), middleware.RequireAdmin())
 	{
+		// Users
 		admin.GET("/users", adminController.ListUsers)
 		admin.PUT("/users/:id", adminController.UpdateUser)
 		admin.DELETE("/users/:id", adminController.DeleteUser)
+
+		// Invite codes
+		admin.GET("/invite-codes", inviteCodesController.ListInviteCodes)
+		admin.POST("/invite-codes", inviteCodesController.CreateInviteCode)
+		admin.PATCH("/invite-codes/:id/revoke", inviteCodesController.RevokeInviteCode)
+		admin.DELETE("/invite-codes/:id", inviteCodesController.DeleteInviteCode)
 	}
 	if fundamentalsController != nil {
 		RegisterFundamentalsRoutes(admin, fundamentalsController)

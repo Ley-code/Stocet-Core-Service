@@ -101,7 +101,7 @@ func (s *AuthService) Login(req LoginRequest) (*AuthResponse, error) {
 	}
 
 	// Generate token
-	token, err := utils.GenerateToken(user.ID, user.Email, string(user.Role))
+	token, err := utils.GenerateToken(user.ID, user.Email, string(user.Role), string(user.SubscriptionStatus))
 	if err != nil {
 		return nil, errors.New("failed to generate token")
 	}

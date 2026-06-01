@@ -215,3 +215,26 @@ func (c *AuthController) ChangePassword(ctx *gin.Context) {
 
 	utils.SuccessResponse(ctx, 200, nil, "Password changed successfully")
 }
+
+// RegisterFCMToken stores the device FCM token for push notifications.
+// Called by the mobile app after obtaining a token from Firebase.
+func (c *AuthController) RegisterFCMToken(ctx *gin.Context) {
+	userID, _ := ctx.Get("user_id")
+
+	var body struct {
+		Token string `json:"token" binding:"required"`
+	}
+	if err := ctx.ShouldBindJSON(&body); err != nil || strings.TrimSpace(body.Token) == "" {
+		utils.BadRequest(ctx, "token is required")
+		return
+	}
+
+	if err := c.userRepo.UpdateFields(userID.(string), map[string]interface{}{
+		"fcm_token": body.Token,
+	}); err != nil {
+		utils.InternalServerError(ctx, err, "Failed to store FCM token")
+		return
+	}
+
+	utils.SuccessResponse(ctx, http.StatusOK, nil, "FCM token registered")
+}

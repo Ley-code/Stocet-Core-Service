@@ -8,7 +8,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// AuthMiddleware validates JWT tokens
+// AuthMiddleware validates JWT tokens and populates user context keys.
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		authHeader := c.GetHeader("Authorization")
@@ -25,18 +25,17 @@ func AuthMiddleware() gin.HandlerFunc {
 			return
 		}
 
-		tokenString := parts[1]
-		claims, err := utils.ValidateToken(tokenString)
+		claims, err := utils.ValidateToken(parts[1])
 		if err != nil {
 			utils.Unauthorized(c, "Invalid or expired token")
 			c.Abort()
 			return
 		}
 
-		// Store user info in context
 		c.Set("user_id", claims.UserID)
 		c.Set("user_email", claims.Email)
 		c.Set("user_role", claims.Role)
+		c.Set("user_subscription", claims.SubscriptionStatus)
 
 		c.Next()
 	}

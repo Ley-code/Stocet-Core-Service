@@ -11,6 +11,7 @@ import (
 	"stocet-core-service/internal/database"
 	"stocet-core-service/internal/email"
 	"stocet-core-service/internal/middleware"
+	"stocet-core-service/internal/push"
 	"stocet-core-service/internal/repositories"
 	"stocet-core-service/internal/routes"
 	"stocet-core-service/internal/services"
@@ -60,7 +61,8 @@ func SetupRouter() *gin.Engine {
 	chatRepo := repositories.NewChatRepository()
 	alertsRepo := repositories.NewAlertsRepository()
 	emailSender := email.NewSMTPSender(config.AppConfig)
-	notificationsRepo := repositories.NewNotificationsRepository(emailSender)
+	fcmService := push.NewFCMService(config.AppConfig.FCMProjectID, config.AppConfig.FCMServiceAccountJSON)
+	notificationsRepo := repositories.NewNotificationsRepository(emailSender, fcmService)
 	verificationCodeRepo := repositories.NewVerificationCodeRepository()
 	inviteCodeRepo := repositories.NewInviteCodeRepository()
 	newsRepo := repositories.NewNewsRepository(database.MongoDBClient)
@@ -112,6 +114,7 @@ func SetupRouter() *gin.Engine {
 	analyticsController := controllers.NewAnalyticsController(analyticsService)
 	dashboardController := controllers.NewDashboardController(dashboardService)
 	adminController := controllers.NewAdminController(userRepo)
+	inviteCodesAdminController := controllers.NewInviteCodesAdminController(inviteCodeRepo)
 	fundamentalsController := controllers.NewFundamentalsController(fundamentalsService, services.NewFinancialImportService(fundamentalsRepo))
 	embeddingsAdminController := controllers.NewEmbeddingsAdminController(embedder)
 	watchlistController := controllers.NewWatchlistController(watchlistService)
@@ -145,7 +148,7 @@ func SetupRouter() *gin.Engine {
 		routes.SetupNotificationsRoutes(api, notificationsController)
 		routes.SetupAnalyticsRoutes(api, analyticsController)
 		routes.SetupDashboardRoutes(api, dashboardController)
-		routes.SetupAdminRoutes(api, adminController, fundamentalsController, embeddingsAdminController)
+		routes.SetupAdminRoutes(api, adminController, inviteCodesAdminController, fundamentalsController, embeddingsAdminController)
 		routes.SetupFundamentalsPublicRoutes(api, fundamentalsController)
 		routes.SetupWatchlistRoutes(api, watchlistController)
 		routes.SetupAIRoutes(api, aiController)

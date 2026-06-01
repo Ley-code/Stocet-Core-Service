@@ -1,6 +1,7 @@
 package repositories
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"strings"
@@ -12,14 +13,16 @@ import (
 	"stocet-core-service/internal/database"
 	"stocet-core-service/internal/email"
 	"stocet-core-service/internal/models"
+	"stocet-core-service/internal/push"
 )
 
 type NotificationsRepository struct {
 	emailSender email.Sender
+	fcm         *push.FCMService
 }
 
-func NewNotificationsRepository(emailSender email.Sender) *NotificationsRepository {
-	return &NotificationsRepository{emailSender: emailSender}
+func NewNotificationsRepository(emailSender email.Sender, fcm *push.FCMService) *NotificationsRepository {
+	return &NotificationsRepository{emailSender: emailSender, fcm: fcm}
 }
 
 // MatchAndTriggerAlerts finds all active alerts whose conditions are met by
@@ -259,7 +262,31 @@ func (r *NotificationsRepository) fireAlert(p fireParams) error {
 		return fmt.Errorf("commit: %w", err)
 	}
 
-	// Send email (best-effort, outside transaction)
+	// Fetch FCM token for this user (best-effort, outside transaction)
+	var fcmToken string
+	if r.fcm != nil && r.fcm.Enabled() {
+		var u models.User
+		if err := database.DB.Select("fcm_token").Where("id = ?", p.userID).First(&u).Error; err == nil {
+			if u.FCMToken != nil {
+				fcmToken = *u.FCMToken
+			}
+		}
+	}
+
+	// Send push notification (best-effort)
+	if fcmToken != "" {
+		pushCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
+		defer cancel()
+		pushData := map[string]string{
+			"type":   "alert",
+			"ticker": p.ticker,
+		}
+		if err := r.fcm.SendPush(pushCtx, fcmToken, fmt.Sprintf("Alert: %s", p.ticker), condText, pushData); err != nil {
+			logrus.Printf("[alerts] push failed alert=%s: %v", p.alertID, err)
+		}
+	}
+
+	// Send email (best-effort)
 	if r.emailSender != nil && r.emailSender.Enabled() && strings.TrimSpace(p.userEmail) != "" {
 		deepLink := fmt.Sprintf("https://stocet.com/markets?symbol=%s", p.ticker)
 		data := email.AlertEmailData{

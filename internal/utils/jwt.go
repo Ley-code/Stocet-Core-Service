@@ -9,20 +9,22 @@ import (
 )
 
 type Claims struct {
-	UserID string `json:"user_id"`
-	Email  string `json:"email"`
-	Role   string `json:"role"`
+	UserID             string `json:"user_id"`
+	Email              string `json:"email"`
+	Role               string `json:"role"`
+	SubscriptionStatus string `json:"subscription_status"`
 	jwt.RegisteredClaims
 }
 
-// GenerateToken generates a JWT token for a user
-func GenerateToken(userID, email, role string) (string, error) {
+// GenerateToken generates a JWT token for a user.
+func GenerateToken(userID, email, role, subscriptionStatus string) (string, error) {
 	expirationTime := time.Now().Add(time.Hour * time.Duration(config.JWT_EXPIRATION_HOURS))
 
 	claims := &Claims{
-		UserID: userID,
-		Email:  email,
-		Role:   role,
+		UserID:             userID,
+		Email:              email,
+		Role:               role,
+		SubscriptionStatus: subscriptionStatus,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),
@@ -39,7 +41,7 @@ func GenerateToken(userID, email, role string) (string, error) {
 	return tokenString, nil
 }
 
-// ValidateToken validates a JWT token and returns the claims
+// ValidateToken validates a JWT token and returns the claims.
 func ValidateToken(tokenString string) (*Claims, error) {
 	claims := &Claims{}
 
