@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"stocet-core-service/internal/config"
 	"stocet-core-service/internal/services"
 	"stocet-core-service/internal/utils"
 
@@ -21,12 +22,60 @@ import (
 // The controller does no LLM-specific logic itself: it validates the request,
 // delegates to AIService, and maps service errors to graceful HTTP responses.
 type AIController struct {
-	svc *services.AIService
+	svc      *services.AIService
+	quotaSvc *services.AIQuotaService
 }
 
 // NewAIController is the canonical constructor used in main.go.
-func NewAIController(svc *services.AIService) *AIController {
-	return &AIController{svc: svc}
+func NewAIController(svc *services.AIService, quotaSvc *services.AIQuotaService) *AIController {
+	return &AIController{svc: svc, quotaSvc: quotaSvc}
+}
+
+func (c *AIController) isAdmin(ctx *gin.Context) bool {
+	role, _ := ctx.Get("user_role")
+	return role == config.ADMIN_ROLE
+}
+
+func (c *AIController) enforceQuota(ctx *gin.Context) bool {
+	if c.quotaSvc == nil {
+		return true
+	}
+	userID, _ := ctx.Get("user_id")
+	if err := c.quotaSvc.CheckAndIncrement(userID.(string), c.isAdmin(ctx)); err != nil {
+		if errors.Is(err, services.ErrAIQuotaExceeded) {
+			used, limit, _ := c.quotaSvc.GetUsage(userID.(string), false)
+			ctx.JSON(http.StatusTooManyRequests, gin.H{
+				"success": false,
+				"error":   "ai_quota_exceeded",
+				"message": "Daily AI request limit reached. Try again tomorrow or upgrade your plan.",
+				"used":    used,
+				"limit":   limit,
+			})
+			return false
+		}
+		utils.InternalServerError(ctx, err, "Failed to check AI quota")
+		return false
+	}
+	return true
+}
+
+// Usage handles GET /ai/usage — today's request count and daily limit.
+func (c *AIController) Usage(ctx *gin.Context) {
+	if c.quotaSvc == nil {
+		utils.SuccessResponse(ctx, http.StatusOK, gin.H{"used": 0, "limit": 0}, "")
+		return
+	}
+	userID, _ := ctx.Get("user_id")
+	used, limit, err := c.quotaSvc.GetUsage(userID.(string), c.isAdmin(ctx))
+	if err != nil {
+		utils.InternalServerError(ctx, err, "Failed to fetch AI usage")
+		return
+	}
+	utils.SuccessResponse(ctx, http.StatusOK, gin.H{
+		"used":    used,
+		"limit":   limit,
+		"unlimited": limit < 0,
+	}, "")
 }
 
 // chatRequest is the wire payload for POST /ai/chat.
@@ -85,6 +134,9 @@ func (c *AIController) Chat(ctx *gin.Context) {
 	}
 	if req.Messages[len(req.Messages)-1].Role != "user" {
 		utils.BadRequest(ctx, "the last message must be from the user")
+		return
+	}
+	if !c.enforceQuota(ctx) {
 		return
 	}
 
@@ -153,6 +205,9 @@ func (c *AIController) ChatStream(ctx *gin.Context) {
 	}
 	if req.Messages[len(req.Messages)-1].Role != "user" {
 		utils.BadRequest(ctx, "the last message must be from the user")
+		return
+	}
+	if !c.enforceQuota(ctx) {
 		return
 	}
 

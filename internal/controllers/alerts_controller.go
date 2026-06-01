@@ -1,6 +1,9 @@
 package controllers
 
 import (
+	"errors"
+	"net/http"
+
 	"stocet-core-service/internal/models"
 	"stocet-core-service/internal/services"
 	"stocet-core-service/internal/utils"
@@ -45,6 +48,14 @@ func (c *AlertsController) Create(ctx *gin.Context) {
 	alert.Status = "active"
 
 	if err := c.service.Create(&alert); err != nil {
+		if errors.Is(err, services.ErrAlertLimitReached) {
+			ctx.JSON(http.StatusPaymentRequired, gin.H{
+				"success": false,
+				"error":   "alert_limit_reached",
+				"message": err.Error(),
+			})
+			return
+		}
 		utils.BadRequest(ctx, err.Error())
 		return
 	}
@@ -120,8 +131,18 @@ func (c *AlertsController) Toggle(ctx *gin.Context) {
 		return
 	}
 
-	newStatus, err := c.service.Toggle(id)
+	role, _ := ctx.Get("user_role")
+	roleStr, _ := role.(string)
+	newStatus, err := c.service.Toggle(id, userID.(string), services.IsAdminRole(roleStr))
 	if err != nil {
+		if errors.Is(err, services.ErrAlertLimitReached) {
+			ctx.JSON(http.StatusPaymentRequired, gin.H{
+				"success": false,
+				"error":   "alert_limit_reached",
+				"message": err.Error(),
+			})
+			return
+		}
 		utils.InternalServerError(ctx, err, "Failed to toggle alert")
 		return
 	}

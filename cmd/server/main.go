@@ -69,6 +69,8 @@ func SetupRouter() *gin.Engine {
 	newsRepo := repositories.NewNewsRepository(database.MongoDBClient)
 	marketDataRepo := repositories.NewMarketDataRepository(database.DB)
 	watchlistRepo := repositories.NewWatchlistRepository()
+	portfolioRepo := repositories.NewPortfolioRepository()
+	aiQuotaRepo := repositories.NewAIQuotaRepository()
 	fundamentalsRepo := repositories.NewFundamentalAnalysisRepository()
 
 	// Initialize AI / Gemini stack first so other services can opt in to embedding hooks.
@@ -90,22 +92,25 @@ func SetupRouter() *gin.Engine {
 	)
 
 	// Initialize services
-	authService := services.NewAuthService(userRepo, verificationCodeRepo, inviteCodeRepo, orgRepo, emailSender)
+	subscriptionService := services.NewSubscriptionService(userRepo, orgRepo)
+	authService := services.NewAuthService(userRepo, verificationCodeRepo, inviteCodeRepo, orgRepo, subscriptionService, emailSender)
 	orgService := services.NewOrganizationService(orgRepo, userRepo)
 	cspService := services.NewCapitalServiceProvidersService(cspRepo)
 	educationService := services.NewEducationService(educationRepo)
 	chatService := services.NewChatService(chatRepo)
-	alertsService := services.NewAlertsService(alertsRepo)
+	alertsService := services.NewAlertsService(alertsRepo, subscriptionService)
 	notificationsService := services.NewNotificationsService(notificationsRepo)
 	newsService := services.NewNewsService(newsRepo)
 	marketDataService := services.NewMarketDataService(marketDataRepo)
 	analyticsService := services.NewAnalyticsService(marketDataService)
 	dashboardService := services.NewDashboardService(newsService, marketDataService, alertsService)
 	watchlistService := services.NewWatchlistService(watchlistRepo)
+	portfolioService := services.NewPortfolioService(portfolioRepo, marketDataService)
+	aiQuotaService := services.NewAIQuotaService(aiQuotaRepo, subscriptionService)
 	fundamentalsService := services.NewFundamentalsService(fundamentalsRepo).WithEmbedder(embedder)
 
 	// Initialize controllers
-	authController := controllers.NewAuthController(authService, userRepo)
+	authController := controllers.NewAuthController(authService, userRepo, subscriptionService)
 	cspController := controllers.NewCapitalServiceProvidersController(cspService)
 	educationController := controllers.NewEducationController(educationService)
 	chatController := controllers.NewChatController(chatService)
@@ -121,7 +126,8 @@ func SetupRouter() *gin.Engine {
 	fundamentalsController := controllers.NewFundamentalsController(fundamentalsService, services.NewFinancialImportService(fundamentalsRepo))
 	embeddingsAdminController := controllers.NewEmbeddingsAdminController(embedder)
 	watchlistController := controllers.NewWatchlistController(watchlistService)
-	aiController := controllers.NewAIController(aiService)
+	portfolioController := controllers.NewPortfolioController(portfolioService)
+	aiController := controllers.NewAIController(aiService, aiQuotaService)
 
 	// Setup Gin router
 	if config.AppConfig.Environment == "production" {
@@ -154,7 +160,8 @@ func SetupRouter() *gin.Engine {
 		routes.SetupAdminRoutes(api, adminController, inviteCodesAdminController, organizationController, fundamentalsController, embeddingsAdminController)
 		routes.SetupFundamentalsPublicRoutes(api, fundamentalsController)
 		routes.SetupWatchlistRoutes(api, watchlistController)
-		routes.SetupAIRoutes(api, aiController)
+		routes.SetupPortfolioRoutes(api, portfolioController, subscriptionService)
+		routes.SetupAIRoutes(api, aiController, subscriptionService)
 	}
 
 	// Long-running embedding backfill is only safe outside Lambda (where

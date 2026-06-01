@@ -62,6 +62,13 @@ const (
 	CHAT_CHANNEL_GENERAL    = "general"
 )
 
+// AI daily request limits by effective subscription tier
+const (
+	AIQuotaFree    = 0
+	AIQuotaPaid    = 20
+	AIQuotaPremium = 100
+)
+
 // Alert constants
 const (
 	ALERT_CONDITION_ABOVE  = "above"

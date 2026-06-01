@@ -27,6 +27,15 @@ func (r *AlertsRepository) GetByUserID(userID string) ([]models.Alert, error) {
 	return alerts, err
 }
 
+// CountActiveByUserID returns the number of active alerts for a user.
+func (r *AlertsRepository) CountActiveByUserID(userID string) (int64, error) {
+	var count int64
+	err := database.DB.Model(&models.Alert{}).
+		Where("user_id = ? AND status = ?", userID, "active").
+		Count(&count).Error
+	return count, err
+}
+
 func (r *AlertsRepository) GetActiveAlerts() ([]models.Alert, error) {
 	var alerts []models.Alert
 	err := database.DB.Where("status = ?", "active").Find(&alerts).Error

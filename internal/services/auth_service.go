@@ -28,6 +28,7 @@ type AuthService struct {
 	verificationCodeRepo *repositories.VerificationCodeRepository
 	inviteCodeRepo       *repositories.InviteCodeRepository
 	orgRepo              *repositories.OrganizationRepository
+	subSvc               *SubscriptionService
 	mailer               email.Sender
 }
 
@@ -36,6 +37,7 @@ func NewAuthService(
 	verificationCodeRepo *repositories.VerificationCodeRepository,
 	inviteCodeRepo *repositories.InviteCodeRepository,
 	orgRepo *repositories.OrganizationRepository,
+	subSvc *SubscriptionService,
 	mailer email.Sender,
 ) *AuthService {
 	return &AuthService{
@@ -43,6 +45,7 @@ func NewAuthService(
 		verificationCodeRepo: verificationCodeRepo,
 		inviteCodeRepo:       inviteCodeRepo,
 		orgRepo:              orgRepo,
+		subSvc:               subSvc,
 		mailer:               mailer,
 	}
 }
@@ -61,8 +64,8 @@ type SignupRequest struct {
 }
 
 type AuthResponse struct {
-	Token string       `json:"token"`
-	User  *models.User `json:"user"`
+	Token string        `json:"token"`
+	User  *UserProfile  `json:"user"`
 }
 
 type SignupResponse struct {
@@ -103,20 +106,53 @@ func (s *AuthService) Login(req LoginRequest) (*AuthResponse, error) {
 		return nil, errors.New("invalid credentials")
 	}
 
+	effective := string(user.SubscriptionStatus)
+	if s.subSvc != nil {
+		effective, err = s.subSvc.EffectiveTier(user.ID)
+		if err != nil {
+			return nil, errors.New("failed to resolve subscription")
+		}
+	}
+
 	orgID := ""
 	if user.OrgID != nil {
 		orgID = user.OrgID.String()
 	}
 
-	// Generate token
-	token, err := utils.GenerateToken(user.ID, user.Email, string(user.Role), string(user.SubscriptionStatus), orgID)
+	token, err := utils.GenerateToken(user.ID, user.Email, string(user.Role), effective, orgID)
 	if err != nil {
 		return nil, errors.New("failed to generate token")
 	}
 
+	var profile *UserProfile
+	if s.subSvc != nil {
+		profile, err = s.subSvc.BuildUserProfile(user)
+		if err != nil {
+			return nil, errors.New("failed to build user profile")
+		}
+	} else {
+		profile = &UserProfile{
+			ID:                    user.ID,
+			Email:                 user.Email,
+			FullName:              user.FullName,
+			PhoneNumber:           user.PhoneNumber,
+			IsVerified:            user.IsVerified,
+			Role:                  string(user.Role),
+			SubscriptionStatus:    string(user.SubscriptionStatus),
+			EffectiveSubscription: effective,
+			HasSeenTour:           user.HasSeenTour,
+			CreatedAt:             user.CreatedAt.Format("2006-01-02T15:04:05Z07:00"),
+			UpdatedAt:             user.UpdatedAt.Format("2006-01-02T15:04:05Z07:00"),
+		}
+		if user.OrgID != nil {
+			s := user.OrgID.String()
+			profile.OrgID = &s
+		}
+	}
+
 	return &AuthResponse{
 		Token: token,
-		User:  user,
+		User:  profile,
 	}, nil
 }
 

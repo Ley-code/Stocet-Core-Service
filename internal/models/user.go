@@ -25,6 +25,7 @@ type SubscriptionStatus string
 
 const (
 	SubscriptionFree    SubscriptionStatus = "free"
+	SubscriptionPaid    SubscriptionStatus = "paid"
 	SubscriptionPremium SubscriptionStatus = "premium"
 )
 

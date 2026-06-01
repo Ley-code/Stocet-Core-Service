@@ -14,10 +14,15 @@ import (
 type AuthController struct {
 	service  *services.AuthService
 	userRepo *repositories.UserRepository
+	subSvc   *services.SubscriptionService
 }
 
-func NewAuthController(service *services.AuthService, userRepo *repositories.UserRepository) *AuthController {
-	return &AuthController{service: service, userRepo: userRepo}
+func NewAuthController(
+	service *services.AuthService,
+	userRepo *repositories.UserRepository,
+	subSvc *services.SubscriptionService,
+) *AuthController {
+	return &AuthController{service: service, userRepo: userRepo, subSvc: subSvc}
 }
 
 func (c *AuthController) Login(ctx *gin.Context) {
@@ -113,7 +118,13 @@ func (c *AuthController) GetMe(ctx *gin.Context) {
 		return
 	}
 
-	utils.SuccessResponse(ctx, 200, user, "")
+	profile, err := c.subSvc.BuildUserProfile(user)
+	if err != nil {
+		utils.InternalServerError(ctx, err, "Failed to load profile")
+		return
+	}
+
+	utils.SuccessResponse(ctx, 200, profile, "")
 }
 
 // DeleteAccount permanently deletes the authenticated user's account
