@@ -35,9 +35,10 @@ func (c *InviteCodesAdminController) ListInviteCodes(ctx *gin.Context) {
 // Body: { code?: string, description?: string, max_uses: int }
 func (c *InviteCodesAdminController) CreateInviteCode(ctx *gin.Context) {
 	var body struct {
-		Code        string `json:"code"`
-		Description string `json:"description"`
-		MaxUses     int    `json:"max_uses"`
+		Code        string  `json:"code"`
+		Description string  `json:"description"`
+		MaxUses     int     `json:"max_uses"`
+		OrgID       *string `json:"org_id"`
 	}
 	if err := ctx.ShouldBindJSON(&body); err != nil {
 		utils.BadRequest(ctx, "Invalid request body")
@@ -60,6 +61,14 @@ func (c *InviteCodesAdminController) CreateInviteCode(ctx *gin.Context) {
 		MaxUses:     body.MaxUses,
 		IsActive:    true,
 		CreatedBy:   &adminUID,
+	}
+	if body.OrgID != nil && strings.TrimSpace(*body.OrgID) != "" {
+		orgUID, err := uuid.Parse(strings.TrimSpace(*body.OrgID))
+		if err != nil {
+			utils.BadRequest(ctx, "Invalid org_id")
+			return
+		}
+		ic.OrgID = &orgUID
 	}
 
 	if err := c.repo.Create(ic); err != nil {

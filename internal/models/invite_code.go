@@ -13,6 +13,7 @@ type InviteCode struct {
 	IsActive    bool       `gorm:"not null;default:true"                           json:"is_active"`
 	MaxUses     int        `gorm:"not null;default:1"                              json:"max_uses"`
 	CurrentUses int        `gorm:"not null;default:0"                              json:"current_uses"`
+	OrgID       *uuid.UUID `gorm:"type:uuid"                                       json:"org_id,omitempty"`
 	CreatedBy   *uuid.UUID `gorm:"type:uuid"                                       json:"created_by,omitempty"`
 	CreatedAt   time.Time  `                                                       json:"created_at"`
 	UpdatedAt   time.Time  `                                                       json:"updated_at"`

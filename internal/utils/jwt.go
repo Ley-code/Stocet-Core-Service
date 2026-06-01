@@ -13,11 +13,12 @@ type Claims struct {
 	Email              string `json:"email"`
 	Role               string `json:"role"`
 	SubscriptionStatus string `json:"subscription_status"`
+	OrgID              string `json:"org_id,omitempty"`
 	jwt.RegisteredClaims
 }
 
 // GenerateToken generates a JWT token for a user.
-func GenerateToken(userID, email, role, subscriptionStatus string) (string, error) {
+func GenerateToken(userID, email, role, subscriptionStatus, orgID string) (string, error) {
 	expirationTime := time.Now().Add(time.Hour * time.Duration(config.JWT_EXPIRATION_HOURS))
 
 	claims := &Claims{
@@ -25,6 +26,7 @@ func GenerateToken(userID, email, role, subscriptionStatus string) (string, erro
 		Email:              email,
 		Role:               role,
 		SubscriptionStatus: subscriptionStatus,
+		OrgID:              orgID,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(expirationTime),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

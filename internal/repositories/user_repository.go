@@ -3,6 +3,8 @@ package repositories
 import (
 	"stocet-core-service/internal/database"
 	"stocet-core-service/internal/models"
+
+	"github.com/google/uuid"
 )
 
 type UserRepository struct{}
@@ -61,4 +63,10 @@ func (r *UserRepository) SetVerifiedByEmail(email string) error {
 	return database.DB.Model(&models.User{}).
 		Where("email = ?", email).
 		Update("is_verified", true).Error
+}
+
+func (r *UserRepository) SetOrgID(userID string, orgID uuid.UUID) error {
+	return database.DB.Model(&models.User{}).
+		Where("id = ?", userID).
+		Update("org_id", orgID).Error
 }

@@ -11,6 +11,7 @@ func SetupAdminRoutes(
 	router *gin.RouterGroup,
 	adminController *controllers.AdminController,
 	inviteCodesController *controllers.InviteCodesAdminController,
+	orgController *controllers.OrganizationController,
 	fundamentalsController *controllers.FundamentalsController,
 	embeddingsAdmin *controllers.EmbeddingsAdminController,
 ) {
@@ -27,6 +28,7 @@ func SetupAdminRoutes(
 		admin.PATCH("/invite-codes/:id/revoke", inviteCodesController.RevokeInviteCode)
 		admin.DELETE("/invite-codes/:id", inviteCodesController.DeleteInviteCode)
 	}
+	RegisterOrganizationRoutes(admin, orgController)
 	if fundamentalsController != nil {
 		RegisterFundamentalsRoutes(admin, fundamentalsController)
 	}

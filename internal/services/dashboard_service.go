@@ -111,21 +111,34 @@ func (s *DashboardService) buildMarketSummary(prices []models.MarketPrice) Marke
 	}
 }
 
+// effectivePercentChange uses stored percent_change when present; otherwise
+// derives it from variation/price so movers still populate when ESX omits %.
+func effectivePercentChange(price models.MarketPrice) float64 {
+	if price.PercentChange != 0 {
+		return price.PercentChange
+	}
+	if price.Price > 0 && price.Variation != 0 {
+		return (price.Variation / price.Price) * 100
+	}
+	return 0
+}
+
 func (s *DashboardService) getTopMovers(prices []models.MarketPrice) ([]TopMoverData, []TopMoverData) {
 	gainers := make([]TopMoverData, 0)
 	losers := make([]TopMoverData, 0)
 
 	for _, price := range prices {
+		pct := effectivePercentChange(price)
 		mover := TopMoverData{
 			Ticker:        price.TickerSymbol,
 			Price:         price.Price,
-			PercentChange: price.PercentChange,
+			PercentChange: pct,
 			Variation:     price.Variation,
 		}
 
-		if price.PercentChange > 0 {
+		if pct > 0 {
 			gainers = append(gainers, mover)
-		} else if price.PercentChange < 0 {
+		} else if pct < 0 {
 			losers = append(losers, mover)
 		}
 	}

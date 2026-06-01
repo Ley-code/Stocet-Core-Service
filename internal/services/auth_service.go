@@ -27,6 +27,7 @@ type AuthService struct {
 	userRepo             *repositories.UserRepository
 	verificationCodeRepo *repositories.VerificationCodeRepository
 	inviteCodeRepo       *repositories.InviteCodeRepository
+	orgRepo              *repositories.OrganizationRepository
 	mailer               email.Sender
 }
 
@@ -34,12 +35,14 @@ func NewAuthService(
 	userRepo *repositories.UserRepository,
 	verificationCodeRepo *repositories.VerificationCodeRepository,
 	inviteCodeRepo *repositories.InviteCodeRepository,
+	orgRepo *repositories.OrganizationRepository,
 	mailer email.Sender,
 ) *AuthService {
 	return &AuthService{
 		userRepo:             userRepo,
 		verificationCodeRepo: verificationCodeRepo,
 		inviteCodeRepo:       inviteCodeRepo,
+		orgRepo:              orgRepo,
 		mailer:               mailer,
 	}
 }
@@ -100,8 +103,13 @@ func (s *AuthService) Login(req LoginRequest) (*AuthResponse, error) {
 		return nil, errors.New("invalid credentials")
 	}
 
+	orgID := ""
+	if user.OrgID != nil {
+		orgID = user.OrgID.String()
+	}
+
 	// Generate token
-	token, err := utils.GenerateToken(user.ID, user.Email, string(user.Role), string(user.SubscriptionStatus))
+	token, err := utils.GenerateToken(user.ID, user.Email, string(user.Role), string(user.SubscriptionStatus), orgID)
 	if err != nil {
 		return nil, errors.New("failed to generate token")
 	}
@@ -149,6 +157,8 @@ func (s *AuthService) Signup(req SignupRequest) (*SignupResponse, error) {
 		return nil, err
 	}
 
+	orgID, _ := s.orgRepo.GetOrgIDByCode(inviteTrim)
+
 	// Hash password
 	hashedPassword, err := utils.HashPassword(req.Password)
 	if err != nil {
@@ -193,6 +203,14 @@ func (s *AuthService) Signup(req SignupRequest) (*SignupResponse, error) {
 		_ = s.userRepo.Delete(user.ID)
 		_ = s.inviteCodeRepo.Release(inviteTrim)
 		return nil, errors.New("failed to send verification email")
+	}
+
+	if orgID != nil {
+		userUUID, parseErr := uuid.Parse(user.ID)
+		if parseErr == nil {
+			_ = s.orgRepo.AddMember(*orgID, userUUID, models.OrgRoleMember)
+			_ = s.userRepo.SetOrgID(user.ID, *orgID)
+		}
 	}
 
 	return &SignupResponse{
