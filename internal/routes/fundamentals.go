@@ -24,6 +24,7 @@ func RegisterFundamentalsRoutes(admin *gin.RouterGroup, c *controllers.Fundament
 
 		profiles.GET("/:id/financial-reports", c.ListFinancialReports)
 		profiles.POST("/:id/financial-reports", c.CreateFinancialReport)
+		profiles.POST("/:id/financial-reports/import", c.ImportFinancialReports)
 
 		profiles.GET("/:id/corporate-news", c.ListCorporateNews)
 		profiles.POST("/:id/corporate-news", c.CreateCorporateNews)
@@ -32,6 +33,7 @@ func RegisterFundamentalsRoutes(admin *gin.RouterGroup, c *controllers.Fundament
 	f.PUT("/board-members/:memberId", c.UpdateBoardMember)
 	f.DELETE("/board-members/:memberId", c.DeleteBoardMember)
 
+	f.GET("/financial-reports/template", c.DownloadImportTemplate)
 	f.PUT("/financial-reports/:reportId", c.UpdateFinancialReport)
 	f.DELETE("/financial-reports/:reportId", c.DeleteFinancialReport)
 

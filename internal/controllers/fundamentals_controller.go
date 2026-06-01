@@ -3,6 +3,7 @@ package controllers
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"stocet-core-service/internal/models"
 	"stocet-core-service/internal/services"
@@ -15,11 +16,12 @@ import (
 // FundamentalsController exposes HTTP handlers for fundamentals data.
 // Routes that require admin access should be registered under the admin group with RequireAdmin().
 type FundamentalsController struct {
-	svc *services.FundamentalsService
+	svc       *services.FundamentalsService
+	importSvc *services.FinancialImportService
 }
 
-func NewFundamentalsController(svc *services.FundamentalsService) *FundamentalsController {
-	return &FundamentalsController{svc: svc}
+func NewFundamentalsController(svc *services.FundamentalsService, importSvc *services.FinancialImportService) *FundamentalsController {
+	return &FundamentalsController{svc: svc, importSvc: importSvc}
 }
 
 func parseFundamentalsListParams(c *gin.Context) (limit, offset int) {
@@ -302,4 +304,68 @@ func (ctrl *FundamentalsController) GetPublicCompanyDirectory(c *gin.Context) {
 		return
 	}
 	utils.SuccessResponse(c, http.StatusOK, gin.H{"entries": entries}, "")
+}
+
+// ImportFinancialReports handles POST .../financial-reports/import
+// Accepts multipart/form-data with field "file" (.xlsx or .csv).
+func (ctrl *FundamentalsController) ImportFinancialReports(c *gin.Context) {
+	profileID := c.Param("id")
+	if profileID == "" {
+		utils.BadRequest(c, "company profile id required")
+		return
+	}
+
+	// Verify profile exists
+	if _, err := ctrl.svc.GetCompanyProfileByID(profileID); err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			utils.NotFound(c, "Company profile not found")
+			return
+		}
+		utils.InternalServerError(c, err, "Failed to verify company profile")
+		return
+	}
+
+	fh, err := c.FormFile("file")
+	if err != nil {
+		utils.BadRequest(c, "file field required (multipart/form-data)")
+		return
+	}
+
+	const maxSize = 5 << 20 // 5 MB
+	if fh.Size > maxSize {
+		utils.BadRequest(c, "file too large (max 5 MB)")
+		return
+	}
+
+	f, err := fh.Open()
+	if err != nil {
+		utils.InternalServerError(c, err, "Failed to open uploaded file")
+		return
+	}
+	defer f.Close()
+
+	name := strings.ToLower(fh.Filename)
+	var result *services.ImportResult
+	switch {
+	case strings.HasSuffix(name, ".xlsx"):
+		result, err = ctrl.importSvc.ImportXLSX(f, profileID)
+	case strings.HasSuffix(name, ".csv"):
+		result, err = ctrl.importSvc.ImportCSV(f, profileID)
+	default:
+		utils.BadRequest(c, "unsupported file type — upload .xlsx or .csv")
+		return
+	}
+
+	if err != nil {
+		utils.BadRequest(c, err.Error())
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, result, "Import complete")
+}
+
+// DownloadImportTemplate returns a CSV template file the admin can fill in.
+func (ctrl *FundamentalsController) DownloadImportTemplate(c *gin.Context) {
+	c.Header("Content-Disposition", `attachment; filename="financial_reports_template.csv"`)
+	c.Data(http.StatusOK, "text/csv; charset=utf-8", []byte(services.TemplateCSV()))
 }
