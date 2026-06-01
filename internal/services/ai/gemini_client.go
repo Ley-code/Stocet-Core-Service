@@ -47,7 +47,7 @@ type GeminiClient struct {
 // NewGeminiClient constructs a GeminiClient with the configured timeout and models.
 func NewGeminiClient(apiKey, chatModel, embedModel string, timeout time.Duration) *GeminiClient {
 	if chatModel == "" {
-		chatModel = "gemini-1.5-flash"
+		chatModel = "gemini-2.5-flash"
 	}
 	if embedModel == "" {
 		// text-embedding-004 is not available on v1beta embedContent for many keys;
@@ -309,7 +309,7 @@ func (c *GeminiClient) doJSON(ctx context.Context, method, rawURL string, body a
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case <-time.After(time.Duration(attempt) * 400 * time.Millisecond):
+		case <-time.After(time.Duration(attempt) * 2 * time.Second):
 		}
 	}
 	if lastErr != nil {

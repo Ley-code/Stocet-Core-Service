@@ -18,8 +18,15 @@ func (s *AlertsService) Create(alert *models.Alert) error {
 	if alert.Ticker == "" {
 		return errors.New("ticker is required")
 	}
-	if alert.Threshold <= 0 {
-		return errors.New("threshold must be greater than 0")
+	// price and percent_change types require a threshold
+	if alert.AlertType != models.AlertTypeNewNews && alert.Threshold == 0 {
+		return errors.New("threshold is required for this alert type")
+	}
+	if alert.AlertType == "" {
+		alert.AlertType = models.AlertTypePrice
+	}
+	if alert.CooldownHours <= 0 {
+		alert.CooldownHours = 24
 	}
 	return s.repo.Create(alert)
 }
@@ -40,12 +47,17 @@ func (s *AlertsService) Update(alert *models.Alert) error {
 	if alert.Ticker == "" {
 		return errors.New("ticker is required")
 	}
-	if alert.Threshold <= 0 {
-		return errors.New("threshold must be greater than 0")
-	}
 	return s.repo.Update(alert)
 }
 
 func (s *AlertsService) Delete(id string) error {
 	return s.repo.Delete(id)
+}
+
+func (s *AlertsService) Toggle(id string) (string, error) {
+	return s.repo.Toggle(id)
+}
+
+func (s *AlertsService) GetHistory(alertID string) ([]models.AlertTriggerHistory, error) {
+	return s.repo.GetHistory(alertID, 20)
 }

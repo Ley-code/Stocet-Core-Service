@@ -19,13 +19,11 @@ func NewAlertsController(service *services.AlertsService) *AlertsController {
 
 func (c *AlertsController) List(ctx *gin.Context) {
 	userID, _ := ctx.Get("user_id")
-
 	alerts, err := c.service.GetByUserID(userID.(string))
 	if err != nil {
 		utils.InternalServerError(ctx, err, "Failed to fetch alerts")
 		return
 	}
-
 	utils.SuccessResponse(ctx, 200, alerts, "")
 }
 
@@ -43,7 +41,6 @@ func (c *AlertsController) Create(ctx *gin.Context) {
 		utils.BadRequest(ctx, "Invalid user ID format")
 		return
 	}
-
 	alert.UserID = userUUID
 	alert.Status = "active"
 
@@ -51,7 +48,6 @@ func (c *AlertsController) Create(ctx *gin.Context) {
 		utils.BadRequest(ctx, err.Error())
 		return
 	}
-
 	utils.SuccessResponse(ctx, 201, alert, "Alert created successfully")
 }
 
@@ -59,61 +55,98 @@ func (c *AlertsController) Update(ctx *gin.Context) {
 	id := ctx.Param("id")
 	userID, _ := ctx.Get("user_id")
 
-	// Get existing alert to verify ownership
-	alert, err := c.service.GetByID(id)
+	existing, err := c.service.GetByID(id)
 	if err != nil {
 		utils.NotFound(ctx, "Alert not found")
 		return
 	}
-
-	if alert.UserID.String() != userID.(string) {
+	if existing.UserID.String() != userID.(string) {
 		utils.Forbidden(ctx, "You can only update your own alerts")
 		return
 	}
 
-	var updateAlert models.Alert
-	if err := ctx.ShouldBindJSON(&updateAlert); err != nil {
+	var update models.Alert
+	if err := ctx.ShouldBindJSON(&update); err != nil {
 		utils.BadRequest(ctx, "Invalid request body")
 		return
 	}
-
 	userUUID, err := uuid.Parse(userID.(string))
 	if err != nil {
 		utils.BadRequest(ctx, "Invalid user ID format")
 		return
 	}
+	update.ID = id
+	update.UserID = userUUID
 
-	updateAlert.ID = id
-	updateAlert.UserID = userUUID
-
-	if err := c.service.Update(&updateAlert); err != nil {
+	if err := c.service.Update(&update); err != nil {
 		utils.BadRequest(ctx, err.Error())
 		return
 	}
-
-	utils.SuccessResponse(ctx, 200, updateAlert, "Alert updated successfully")
+	utils.SuccessResponse(ctx, 200, update, "Alert updated successfully")
 }
 
 func (c *AlertsController) Delete(ctx *gin.Context) {
 	id := ctx.Param("id")
 	userID, _ := ctx.Get("user_id")
 
-	// Get existing alert to verify ownership
-	alert, err := c.service.GetByID(id)
+	existing, err := c.service.GetByID(id)
 	if err != nil {
 		utils.NotFound(ctx, "Alert not found")
 		return
 	}
-
-	if alert.UserID.String() != userID.(string) {
+	if existing.UserID.String() != userID.(string) {
 		utils.Forbidden(ctx, "You can only delete your own alerts")
 		return
 	}
-
 	if err := c.service.Delete(id); err != nil {
 		utils.InternalServerError(ctx, err, "Failed to delete alert")
 		return
 	}
-
 	utils.SuccessResponse(ctx, 200, nil, "Alert deleted successfully")
+}
+
+// Toggle flips an alert between active and disabled.
+func (c *AlertsController) Toggle(ctx *gin.Context) {
+	id := ctx.Param("id")
+	userID, _ := ctx.Get("user_id")
+
+	existing, err := c.service.GetByID(id)
+	if err != nil {
+		utils.NotFound(ctx, "Alert not found")
+		return
+	}
+	if existing.UserID.String() != userID.(string) {
+		utils.Forbidden(ctx, "You can only update your own alerts")
+		return
+	}
+
+	newStatus, err := c.service.Toggle(id)
+	if err != nil {
+		utils.InternalServerError(ctx, err, "Failed to toggle alert")
+		return
+	}
+	utils.SuccessResponse(ctx, 200, gin.H{"status": newStatus}, "Alert updated")
+}
+
+// GetHistory returns the trigger history for one alert.
+func (c *AlertsController) GetHistory(ctx *gin.Context) {
+	id := ctx.Param("id")
+	userID, _ := ctx.Get("user_id")
+
+	existing, err := c.service.GetByID(id)
+	if err != nil {
+		utils.NotFound(ctx, "Alert not found")
+		return
+	}
+	if existing.UserID.String() != userID.(string) {
+		utils.Forbidden(ctx, "Not your alert")
+		return
+	}
+
+	history, err := c.service.GetHistory(id)
+	if err != nil {
+		utils.InternalServerError(ctx, err, "Failed to fetch history")
+		return
+	}
+	utils.SuccessResponse(ctx, 200, history, "")
 }

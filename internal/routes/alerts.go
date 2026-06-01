@@ -14,5 +14,7 @@ func SetupAlertsRoutes(router *gin.RouterGroup, controller *controllers.AlertsCo
 		alerts.POST("", controller.Create)
 		alerts.PUT("/:id", controller.Update)
 		alerts.DELETE("/:id", controller.Delete)
+		alerts.PATCH("/:id/toggle", controller.Toggle)
+		alerts.GET("/:id/history", controller.GetHistory)
 	}
 }
