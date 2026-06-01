@@ -12,6 +12,7 @@ func SetupAdminRoutes(
 	adminController *controllers.AdminController,
 	inviteCodesController *controllers.InviteCodesAdminController,
 	orgController *controllers.OrganizationController,
+	caController *controllers.CorporateActionController,
 	fundamentalsController *controllers.FundamentalsController,
 	embeddingsAdmin *controllers.EmbeddingsAdminController,
 ) {
@@ -29,6 +30,7 @@ func SetupAdminRoutes(
 		admin.DELETE("/invite-codes/:id", inviteCodesController.DeleteInviteCode)
 	}
 	RegisterOrganizationRoutes(admin, orgController)
+	RegisterCorporateActionAdminRoutes(admin, caController)
 	if fundamentalsController != nil {
 		RegisterFundamentalsRoutes(admin, fundamentalsController)
 	}
