@@ -16,5 +16,6 @@ func SetupAlertsRoutes(router *gin.RouterGroup, controller *controllers.AlertsCo
 		alerts.DELETE("/:id", controller.Delete)
 		alerts.PATCH("/:id/toggle", controller.Toggle)
 		alerts.GET("/:id/history", controller.GetHistory)
+		alerts.GET("/export", controller.Export)
 	}
 }

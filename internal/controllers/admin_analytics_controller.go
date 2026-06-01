@@ -35,8 +35,8 @@ func (c *AdminAnalyticsController) Get(ctx *gin.Context) {
 	db.Raw(`SELECT COUNT(*) FROM users WHERE deleted_at IS NULL AND created_at >= NOW() - INTERVAL '7 days'`).Scan(&newUsers7d)
 	db.Raw(`SELECT COUNT(*) FROM users WHERE deleted_at IS NULL AND created_at >= NOW() - INTERVAL '30 days'`).Scan(&newUsers30d)
 
-	// Users by subscription tier
-	var tierRows []userTierRow
+	// Users by subscription tier — initialise to empty slice so JSON is [] not null
+	tierRows := make([]userTierRow, 0)
 	db.Raw(`
 		SELECT subscription_status AS tier, COUNT(*) AS count
 		FROM users
@@ -54,7 +54,7 @@ func (c *AdminAnalyticsController) Get(ctx *gin.Context) {
 	db.Raw(`SELECT COUNT(DISTINCT user_id) FROM ai_usage_daily WHERE usage_date = CURRENT_DATE AND request_count > 0`).Scan(&aiUsersToday)
 
 	// Daily breakdown for last 7 days
-	var aiByDay []aiDayRow
+	aiByDay := make([]aiDayRow, 0)
 	db.Raw(`
 		SELECT usage_date::text AS day,
 		       SUM(request_count) AS requests,

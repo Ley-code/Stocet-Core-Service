@@ -1,8 +1,11 @@
 package controllers
 
 import (
+	"encoding/csv"
 	"errors"
+	"fmt"
 	"net/http"
+	"time"
 
 	"stocet-core-service/internal/models"
 	"stocet-core-service/internal/services"
@@ -147,6 +150,45 @@ func (c *AlertsController) Toggle(ctx *gin.Context) {
 		return
 	}
 	utils.SuccessResponse(ctx, 200, gin.H{"status": newStatus}, "Alert updated")
+}
+
+// Export godoc — GET /alerts/export
+// Streams a CSV of all alerts for the authenticated user.
+func (c *AlertsController) Export(ctx *gin.Context) {
+	userID, _ := ctx.Get("user_id")
+	alerts, err := c.service.GetByUserID(userID.(string))
+	if err != nil {
+		utils.InternalServerError(ctx, err, "Failed to fetch alerts")
+		return
+	}
+
+	filename := fmt.Sprintf("alerts_%s.csv", time.Now().Format("2006-01-02"))
+	ctx.Header("Content-Type", "text/csv; charset=utf-8")
+	ctx.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+
+	w := csv.NewWriter(ctx.Writer)
+	_ = w.Write([]string{
+		"Ticker", "Type", "Condition", "Threshold", "Status",
+		"Is Recurring", "Cooldown Hours", "Created At", "Last Triggered At",
+	})
+	for _, a := range alerts {
+		lastTriggered := ""
+		if a.LastTriggeredAt != nil {
+			lastTriggered = a.LastTriggeredAt.Format(time.RFC3339)
+		}
+		_ = w.Write([]string{
+			a.Ticker,
+			string(a.AlertType),
+			a.Condition,
+			fmt.Sprintf("%.4f", a.Threshold),
+			string(a.Status),
+			fmt.Sprintf("%v", a.IsRecurring),
+			fmt.Sprintf("%d", a.CooldownHours),
+			a.CreatedAt.Format(time.RFC3339),
+			lastTriggered,
+		})
+	}
+	w.Flush()
 }
 
 // GetHistory returns the trigger history for one alert.

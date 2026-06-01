@@ -22,5 +22,6 @@ func SetupPortfolioRoutes(router *gin.RouterGroup, controller *controllers.Portf
 		portfolio.POST("/holdings", controller.Create)
 		portfolio.PUT("/holdings/:id", controller.Update)
 		portfolio.DELETE("/holdings/:id", controller.Delete)
+		portfolio.GET("/export", controller.Export)
 	}
 }

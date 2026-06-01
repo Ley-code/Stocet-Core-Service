@@ -7,9 +7,12 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func SetupNotificationsRoutes(router *gin.RouterGroup, controller *controllers.NotificationsController) {
+func SetupNotificationsRoutes(
+	router *gin.RouterGroup,
+	controller *controllers.NotificationsController,
+	prefController *controllers.NotificationPreferenceController,
+) {
 	// Internal endpoint — called by the News Aggregation Service.
-	// No auth middleware; secure via network/API-key in production.
 	router.POST("/internal/trigger-alerts", controller.HandleTriggerAlerts)
 
 	// User-facing notification endpoints (require authentication).
@@ -18,5 +21,9 @@ func SetupNotificationsRoutes(router *gin.RouterGroup, controller *controllers.N
 		notifications.GET("", controller.GetAllNotifications)
 		notifications.GET("/unread", controller.GetUnreadNotifications)
 		notifications.PATCH("/:id/read", controller.MarkNotificationRead)
+
+		// Notification preferences
+		notifications.GET("/preferences", prefController.Get)
+		notifications.PUT("/preferences", prefController.Update)
 	}
 }

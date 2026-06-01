@@ -1,7 +1,10 @@
 package controllers
 
 import (
+	"encoding/csv"
 	"errors"
+	"fmt"
+	"time"
 
 	"stocet-core-service/internal/repositories"
 	"stocet-core-service/internal/services"
@@ -73,4 +76,45 @@ func (c *PortfolioController) Delete(ctx *gin.Context) {
 		return
 	}
 	utils.SuccessResponse(ctx, 200, nil, "Holding removed")
+}
+
+// Export godoc — GET /portfolio/export
+// Streams a CSV of all holdings with live prices. Premium-gated via route middleware.
+func (c *PortfolioController) Export(ctx *gin.Context) {
+	userID, _ := ctx.Get("user_id")
+	portfolio, err := c.svc.GetPortfolio(userID.(string))
+	if err != nil {
+		utils.InternalServerError(ctx, err, "Failed to fetch portfolio")
+		return
+	}
+
+	filename := fmt.Sprintf("portfolio_%s.csv", time.Now().Format("2006-01-02"))
+	ctx.Header("Content-Type", "text/csv; charset=utf-8")
+	ctx.Header("Content-Disposition", fmt.Sprintf(`attachment; filename="%s"`, filename))
+
+	w := csv.NewWriter(ctx.Writer)
+	_ = w.Write([]string{
+		"Ticker", "Shares", "Buy Price (ETB)", "Buy Date",
+		"Current Price (ETB)", "Market Value (ETB)", "Cost Basis (ETB)",
+		"Unrealized P&L (ETB)", "Unrealized P&L %", "Allocation %",
+	})
+	for _, h := range portfolio.Holdings {
+		buyDate := ""
+		if h.BuyDate != nil {
+			buyDate = h.BuyDate.Format("2006-01-02")
+		}
+		_ = w.Write([]string{
+			h.Ticker,
+			fmt.Sprintf("%.4f", h.Shares),
+			fmt.Sprintf("%.2f", h.BuyPrice),
+			buyDate,
+			fmt.Sprintf("%.2f", h.LatestPrice),
+			fmt.Sprintf("%.2f", h.MarketValue),
+			fmt.Sprintf("%.2f", h.CostBasis),
+			fmt.Sprintf("%.2f", h.UnrealizedPnL),
+			fmt.Sprintf("%.2f", h.UnrealizedPnLPct),
+			fmt.Sprintf("%.2f", h.AllocationPct),
+		})
+	}
+	w.Flush()
 }
