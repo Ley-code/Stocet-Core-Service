@@ -127,6 +127,8 @@ func SetupRouter() *gin.Engine {
 	embeddingsAdminController := controllers.NewEmbeddingsAdminController(embedder)
 	watchlistController := controllers.NewWatchlistController(watchlistService)
 	portfolioController := controllers.NewPortfolioController(portfolioService)
+	advisoryController := controllers.NewAdvisoryController(repositories.NewAdvisoryReportRepository())
+	screenerController := controllers.NewScreenerController()
 	aiController := controllers.NewAIController(aiService, aiQuotaService)
 
 	// Setup Gin router
@@ -161,6 +163,8 @@ func SetupRouter() *gin.Engine {
 		routes.SetupFundamentalsPublicRoutes(api, fundamentalsController)
 		routes.SetupWatchlistRoutes(api, watchlistController)
 		routes.SetupPortfolioRoutes(api, portfolioController, subscriptionService)
+		routes.SetupAdvisoryRoutes(api, advisoryController, subscriptionService)
+		routes.SetupScreenerRoutes(api, screenerController)
 		routes.SetupAIRoutes(api, aiController, subscriptionService)
 	}
 
