@@ -2,7 +2,6 @@ package routes
 
 import (
 	"stocet-core-service/internal/controllers"
-	"stocet-core-service/internal/middleware"
 
 	"github.com/gin-gonic/gin"
 )
