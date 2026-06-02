@@ -89,11 +89,11 @@ type ChatMessage struct {
 // technical-analysis lookups. It owns nothing concurrent; one Chat call =
 // one synchronous Gemini interaction (with up to 3 tool rounds).
 type AIService struct {
-	client       *ai.GeminiClient
-	rag          *ai.RAGService
-	ta           *ai.TechnicalAnalysisService
-	maxTurns     int
-	maxChars     int
+	client        *ai.GeminiClient
+	rag           *ai.RAGService
+	ta            *ai.TechnicalAnalysisService
+	maxTurns      int
+	maxChars      int
 	maxToolRounds int
 }
 

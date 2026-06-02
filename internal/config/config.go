@@ -38,7 +38,11 @@ type Config struct {
 	SMTPPassword string
 	SMTPFrom     string
 
-	// AI / Gemini (RAG Data Assistant)
+	// AI — Claude (chat / tool-calling)
+	ClaudeAPIKey  string
+	ClaudeModel   string
+
+	// AI — Gemini (embeddings / RAG only; chat has moved to Claude)
 	GeminiAPIKey          string
 	GeminiChatModel       string
 	GeminiEmbedModel      string
@@ -82,8 +86,11 @@ func LoadConfig() error {
 		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
 		SMTPFrom:     getEnv("SMTP_FROM", ""),
 
+		ClaudeAPIKey:  getEnv("CLAUDE_API_KEY", ""),
+		ClaudeModel:   getEnv("CLAUDE_MODEL", "claude-haiku-4-5"),
+
 		GeminiAPIKey:          getEnv("GEMINI_API_KEY", ""),
-		GeminiChatModel:       getEnv("GEMINI_CHAT_MODEL", "gemini-1.5-flash"),
+		GeminiChatModel:       getEnv("GEMINI_CHAT_MODEL", "gemini-2.5-flash"),
 		GeminiEmbedModel:      getEnv("GEMINI_EMBED_MODEL", "gemini-embedding-001"),
 		AIChatHistoryMaxTurns: getEnvInt("AI_CHAT_MAX_TURNS", 12),
 		AIChatHistoryMaxChars: getEnvInt("AI_CHAT_MAX_CHARS", 16000),
