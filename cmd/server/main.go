@@ -126,7 +126,7 @@ func SetupRouter() *gin.Engine {
 	inviteCodesAdminController := controllers.NewInviteCodesAdminController(inviteCodeRepo)
 	organizationController := controllers.NewOrganizationController(orgService)
 	fundamentalsController := controllers.NewFundamentalsController(fundamentalsService, services.NewFinancialImportService(fundamentalsRepo))
-	embeddingsAdminController := controllers.NewEmbeddingsAdminController(embedder)
+	embeddingsAdminController := controllers.NewEmbeddingsAdminController(embedder).WithSentiment(geminiClient, newsRepo)
 	watchlistController := controllers.NewWatchlistController(watchlistService)
 	portfolioController := controllers.NewPortfolioController(portfolioService)
 	advisoryController := controllers.NewAdvisoryController(repositories.NewAdvisoryReportRepository())
@@ -185,6 +185,13 @@ func SetupRouter() *gin.Engine {
 			embedder,
 			time.Duration(config.AppConfig.AIBackfillIntervalSec)*time.Second,
 			config.AppConfig.AIBackfillBatchSize,
+		)
+		go ai.StartSentimentWorker(
+			context.Background(),
+			geminiClient,
+			newsRepo,
+			15*time.Minute,
+			20,
 		)
 	}
 

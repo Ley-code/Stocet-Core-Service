@@ -50,5 +50,6 @@ func SetupAdminRoutes(
 	}
 	if embeddingsAdmin != nil {
 		admin.POST("/ai/embeddings/backfill", embeddingsAdmin.RunBackfill)
+		admin.POST("/ai/sentiment/backfill", embeddingsAdmin.RunSentimentBackfill)
 	}
 }

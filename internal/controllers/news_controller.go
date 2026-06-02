@@ -54,7 +54,8 @@ func (c *NewsController) GetNews(ctx *gin.Context) {
 		}
 	}
 
-	filters := c.service.BuildFilters(category, source, searchText, startDate, endDate)
+	sentiment := ctx.Query("sentiment")
+	filters := c.service.BuildFilters(category, source, searchText, sentiment, startDate, endDate)
 
 	var cursorPublished *time.Time
 	var cursorID *primitive.ObjectID

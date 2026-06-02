@@ -28,7 +28,7 @@ func (s *NewsService) DeleteNews(id string) error {
 }
 
 // BuildFilters builds filter map from query parameters
-func (s *NewsService) BuildFilters(category, source, searchText string, startDate, endDate *time.Time) map[string]interface{} {
+func (s *NewsService) BuildFilters(category, source, searchText, sentiment string, startDate, endDate *time.Time) map[string]interface{} {
 	filters := make(map[string]interface{})
 
 	if category != "" {
@@ -37,6 +37,10 @@ func (s *NewsService) BuildFilters(category, source, searchText string, startDat
 
 	if source != "" {
 		filters["source"] = source
+	}
+
+	if sentiment != "" {
+		filters["sentiment"] = sentiment
 	}
 
 	if searchText != "" {
