@@ -25,10 +25,12 @@ type NewsArticle struct {
 	Tags                []string   `json:"tags"`
 	ImageURL            string     `json:"image_url,omitempty"`
 	Sentiment           string     `json:"sentiment,omitempty"`
+	SentimentConfidence *float64   `json:"sentiment_confidence,omitempty"`
 	SentimentTickers    []string   `json:"sentiment_tickers,omitempty"`
 	SentimentAnalyzedAt *time.Time `json:"sentiment_analyzed_at,omitempty"`
 	LikeCount           int64      `json:"like_count,omitempty"`
 	Liked               bool       `json:"liked,omitempty"`
+	Bookmarked          bool       `json:"bookmarked,omitempty"`
 }
 
 type PostgresNewsRepository struct {
@@ -137,6 +139,7 @@ func (r *PostgresNewsRepository) GetNews(
 			COALESCE(tags, ARRAY[]::text[]) AS tags,
 			COALESCE(image_url, '') AS image_url,
 			COALESCE(sentiment, '') AS sentiment,
+			sentiment_confidence,
 			COALESCE(sentiment_tickers, ARRAY[]::text[]) AS sentiment_tickers,
 			sentiment_analyzed_at
 		FROM articles
@@ -186,6 +189,7 @@ func mapArticleModel(row models.Article) NewsArticle {
 		Tags:                tags,
 		ImageURL:            row.ImageURL,
 		Sentiment:           row.Sentiment,
+		SentimentConfidence: row.SentimentConfidence,
 		SentimentTickers:    tickers,
 		SentimentAnalyzedAt: row.SentimentAnalyzedAt,
 	}
@@ -228,7 +232,13 @@ func (r *PostgresNewsRepository) GetUnanalyzed(limit int) ([]SentimentArticle, e
 	return articles, nil
 }
 
-func (r *PostgresNewsRepository) UpdateSentiment(ctx context.Context, id string, sentiment string, tickers []string) error {
+func (r *PostgresNewsRepository) UpdateSentiment(
+	ctx context.Context,
+	id string,
+	sentiment string,
+	tickers []string,
+	confidence *float64,
+) error {
 	if tickers == nil {
 		tickers = []string{}
 	}
@@ -236,8 +246,176 @@ func (r *PostgresNewsRepository) UpdateSentiment(ctx context.Context, id string,
 	return r.db.WithContext(ctx).Exec(`
 		UPDATE articles
 		SET sentiment = ?,
+		    sentiment_confidence = ?,
 		    sentiment_tickers = ?,
 		    sentiment_analyzed_at = NOW()
 		WHERE id = ?::uuid
-	`, sentiment, pq.Array(tickers), id).Error
+	`, sentiment, confidence, pq.Array(tickers), id).Error
+}
+
+func (r *PostgresNewsRepository) GetRelatedArticles(articleID string, limit int) ([]NewsArticle, error) {
+	if limit <= 0 {
+		limit = 6
+	}
+	if limit > 25 {
+		limit = 25
+	}
+
+	query := `
+		WITH target AS (
+			SELECT
+				COALESCE(tags, ARRAY[]::text[]) AS tags,
+				COALESCE(sentiment_tickers, ARRAY[]::text[]) AS sentiment_tickers
+			FROM articles
+			WHERE id = ?::uuid
+		)
+		SELECT
+			a.id,
+			a.title,
+			a.url,
+			a.source,
+			a.published_date,
+			a.content,
+			COALESCE(a.summary, '') AS summary,
+			COALESCE(a.tags, ARRAY[]::text[]) AS tags,
+			COALESCE(a.image_url, '') AS image_url,
+			COALESCE(a.sentiment, '') AS sentiment,
+			a.sentiment_confidence,
+			COALESCE(a.sentiment_tickers, ARRAY[]::text[]) AS sentiment_tickers,
+			a.sentiment_analyzed_at
+		FROM articles a
+		CROSS JOIN target t
+		WHERE a.id <> ?::uuid
+		  AND (
+		  	a.tags && t.tags
+		  	OR a.sentiment_tickers && t.sentiment_tickers
+		  )
+		ORDER BY
+			(
+				COALESCE((
+					SELECT COUNT(*)::int
+					FROM unnest(COALESCE(a.sentiment_tickers, ARRAY[]::text[])) x
+					WHERE x = ANY(t.sentiment_tickers)
+				), 0) * 2
+				+
+				COALESCE((
+					SELECT COUNT(*)::int
+					FROM unnest(COALESCE(a.tags, ARRAY[]::text[])) y
+					WHERE y = ANY(t.tags)
+				), 0)
+			) DESC,
+			a.published_date DESC
+		LIMIT ?
+	`
+
+	var rows []models.Article
+	if err := r.db.Raw(query, articleID, articleID, limit).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	articles := make([]NewsArticle, 0, len(rows))
+	for _, row := range rows {
+		articles = append(articles, mapArticleModel(row))
+	}
+	return articles, nil
+}
+
+func (r *PostgresNewsRepository) GetTrendingArticles(limit, hours int) ([]NewsArticle, error) {
+	if limit <= 0 {
+		limit = 10
+	}
+	if limit > 50 {
+		limit = 50
+	}
+	if hours <= 0 {
+		hours = 24
+	}
+
+	query := `
+		SELECT
+			a.id,
+			a.title,
+			a.url,
+			a.source,
+			a.published_date,
+			a.content,
+			COALESCE(a.summary, '') AS summary,
+			COALESCE(a.tags, ARRAY[]::text[]) AS tags,
+			COALESCE(a.image_url, '') AS image_url,
+			COALESCE(a.sentiment, '') AS sentiment,
+			a.sentiment_confidence,
+			COALESCE(a.sentiment_tickers, ARRAY[]::text[]) AS sentiment_tickers,
+			a.sentiment_analyzed_at,
+			COALESCE(COUNT(al.user_id), 0) AS like_count
+		FROM articles a
+		LEFT JOIN article_likes al
+			ON al.article_id = a.id
+		   AND al.created_at >= NOW() - make_interval(hours => ?)
+		WHERE a.published_date >= NOW() - make_interval(hours => ?)
+		GROUP BY a.id
+		ORDER BY like_count DESC, a.published_date DESC
+		LIMIT ?
+	`
+
+	var rows []struct {
+		models.Article
+		LikeCount int64 `gorm:"column:like_count"`
+	}
+	if err := r.db.Raw(query, hours, hours, limit).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	articles := make([]NewsArticle, 0, len(rows))
+	for _, row := range rows {
+		article := mapArticleModel(row.Article)
+		article.LikeCount = row.LikeCount
+		articles = append(articles, article)
+	}
+	return articles, nil
+}
+
+func (r *PostgresNewsRepository) GetForYouArticles(userID string, tickers []string, limit int) ([]NewsArticle, error) {
+	if limit <= 0 {
+		limit = 20
+	}
+	if limit > 100 {
+		limit = 100
+	}
+	if len(tickers) == 0 {
+		return []NewsArticle{}, nil
+	}
+
+	query := `
+		SELECT
+			id,
+			title,
+			url,
+			source,
+			published_date,
+			content,
+			COALESCE(summary, '') AS summary,
+			COALESCE(tags, ARRAY[]::text[]) AS tags,
+			COALESCE(image_url, '') AS image_url,
+			COALESCE(sentiment, '') AS sentiment,
+			sentiment_confidence,
+			COALESCE(sentiment_tickers, ARRAY[]::text[]) AS sentiment_tickers,
+			sentiment_analyzed_at
+		FROM articles
+		WHERE sentiment_tickers && ?::text[]
+		ORDER BY published_date DESC
+		LIMIT ?
+	`
+
+	_ = userID
+
+	var rows []models.Article
+	if err := r.db.Raw(query, pq.Array(tickers), limit).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	articles := make([]NewsArticle, 0, len(rows))
+	for _, row := range rows {
+		articles = append(articles, mapArticleModel(row))
+	}
+	return articles, nil
 }

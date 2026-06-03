@@ -1,25 +1,28 @@
 package services
 
 import (
+	"context"
 	"sync"
 	"time"
 
 	"stocet-core-service/internal/models"
 	"stocet-core-service/internal/repositories"
+	"stocet-core-service/internal/services/ai"
 )
 
 const latestPricesCacheTTL = 30 * time.Second
 
 type MarketDataService struct {
 	repo *repositories.MarketDataRepository
+	ta   *ai.TechnicalAnalysisService
 
-	cacheMu     sync.RWMutex
-	cachedAt    time.Time
+	cacheMu      sync.RWMutex
+	cachedAt     time.Time
 	cachedPrices []models.MarketPrice
 }
 
-func NewMarketDataService(repo *repositories.MarketDataRepository) *MarketDataService {
-	return &MarketDataService{repo: repo}
+func NewMarketDataService(repo *repositories.MarketDataRepository, ta *ai.TechnicalAnalysisService) *MarketDataService {
+	return &MarketDataService{repo: repo, ta: ta}
 }
 
 func (s *MarketDataService) GetLatestAll() ([]models.MarketPrice, error) {
@@ -61,6 +64,10 @@ func (s *MarketDataService) GetCandles(ticker, resolution string, startDate, end
 }
 
 func (s *MarketDataService) ComputeTechnicalIndicators(ticker string, periodDays int) (map[string]interface{}, error) {
+	if s.ta != nil {
+		return s.ta.ComputeFullIndicators(context.Background(), ticker, periodDays)
+	}
+
 	endDate := time.Now()
 	startDate := endDate.AddDate(0, 0, -periodDays)
 
@@ -71,30 +78,66 @@ func (s *MarketDataService) ComputeTechnicalIndicators(ticker string, periodDays
 
 	if len(prices) == 0 {
 		return map[string]interface{}{
-			"ticker": ticker,
-			"sma_20": 0.0,
-			"sma_50": 0.0,
-			"ema_12": 0.0,
-			"rsi":    0.0,
+			"ticker_symbol":        ticker,
+			"sma_20":               nil,
+			"sma_50":               nil,
+			"ema_12":               nil,
+			"ema_20":               nil,
+			"rsi":                  nil,
+			"rsi_signal":           nil,
+			"macd":                 nil,
+			"macd_signal":          nil,
+			"macd_histogram":       nil,
+			"bollinger_upper":      nil,
+			"bollinger_middle":     nil,
+			"bollinger_lower":      nil,
+			"latest_price":         nil,
+			"price_change":         nil,
+			"price_change_percent": nil,
+			"data_points":          0,
+			"period_days":          periodDays,
 		}, nil
 	}
 
-	// Calculate SMA (Simple Moving Average) for 20 and 50 periods
 	sma20 := calculateSMA(prices, min(20, len(prices)))
 	sma50 := calculateSMA(prices, min(50, len(prices)))
-
-	// Calculate EMA (Exponential Moving Average) for 12 periods
 	ema12 := calculateEMA(prices, min(12, len(prices)))
-
-	// Calculate RSI (Relative Strength Index)
+	ema20 := calculateEMA(prices, min(20, len(prices)))
 	rsi := calculateRSI(prices, 14)
+	rsiSig := "neutral"
+	if rsi >= 70 {
+		rsiSig = "overbought"
+	} else if rsi <= 30 {
+		rsiSig = "oversold"
+	}
+
+	latestPrice := prices[len(prices)-1].Price
+	firstPrice := prices[0].Price
+	priceChange := latestPrice - firstPrice
+	var priceChangePct interface{} = nil
+	if firstPrice != 0 {
+		priceChangePct = (priceChange / firstPrice) * 100
+	}
 
 	return map[string]interface{}{
-		"ticker": ticker,
-		"sma_20": sma20,
-		"sma_50": sma50,
-		"ema_12": ema12,
-		"rsi":    rsi,
+		"ticker_symbol":        ticker,
+		"sma_20":               sma20,
+		"sma_50":               sma50,
+		"ema_12":               ema12,
+		"ema_20":               ema20,
+		"rsi":                  rsi,
+		"rsi_signal":           rsiSig,
+		"macd":                 nil,
+		"macd_signal":          nil,
+		"macd_histogram":       nil,
+		"bollinger_upper":      nil,
+		"bollinger_middle":     nil,
+		"bollinger_lower":      nil,
+		"latest_price":         latestPrice,
+		"price_change":         priceChange,
+		"price_change_percent": priceChangePct,
+		"data_points":          len(prices),
+		"period_days":          periodDays,
 	}, nil
 }
 

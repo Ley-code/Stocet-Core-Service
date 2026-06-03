@@ -63,8 +63,10 @@ func SetupRouter() *gin.Engine {
 	inviteCodeRepo := repositories.NewInviteCodeRepository()
 	orgRepo := repositories.NewOrganizationRepository()
 	newsRepo := repositories.NewPostgresNewsRepository(database.DB)
+	articleBookmarksRepo := repositories.NewPostgresArticleBookmarksRepository(database.DB)
 	articleInteractionsRepo := repositories.NewPostgresArticleInteractionsRepository(database.DB)
 	marketDataRepo := repositories.NewMarketDataRepository(database.DB)
+	chartLayoutRepo := repositories.NewChartLayoutRepository(database.DB)
 	watchlistRepo := repositories.NewWatchlistRepository()
 	portfolioRepo := repositories.NewPortfolioRepository()
 	aiQuotaRepo := repositories.NewAIQuotaRepository()
@@ -98,8 +100,10 @@ func SetupRouter() *gin.Engine {
 	alertsService := services.NewAlertsService(alertsRepo, subscriptionService)
 	notificationsService := services.NewNotificationsService(notificationsRepo)
 	newsService := services.NewNewsService(newsRepo)
+	articleBookmarksService := services.NewArticleBookmarksService(articleBookmarksRepo)
 	articleInteractionsService := services.NewArticleInteractionsService(articleInteractionsRepo)
-	marketDataService := services.NewMarketDataService(marketDataRepo)
+	marketDataService := services.NewMarketDataService(marketDataRepo, taService)
+	chartLayoutService := services.NewChartLayoutService(chartLayoutRepo)
 	analyticsService := services.NewAnalyticsService(marketDataService)
 	dashboardService := services.NewDashboardService(newsService, marketDataService, alertsService)
 	watchlistService := services.NewWatchlistService(watchlistRepo)
@@ -116,9 +120,15 @@ func SetupRouter() *gin.Engine {
 	notificationsController := controllers.NewNotificationsController(notificationsService)
 	notifPrefRepo := repositories.NewNotificationPreferenceRepository()
 	notifPrefController := controllers.NewNotificationPreferenceController(notifPrefRepo)
-	newsController := controllers.NewNewsController(newsService, articleInteractionsService)
+	newsController := controllers.NewNewsController(
+		newsService,
+		articleInteractionsService,
+		articleBookmarksService,
+		watchlistService,
+		portfolioService,
+	)
 	articleInteractionsController := controllers.NewArticleInteractionsController(articleInteractionsService)
-	marketDataController := controllers.NewMarketDataController(marketDataService)
+	marketDataController := controllers.NewMarketDataController(marketDataService, taService, chartLayoutService)
 	analyticsController := controllers.NewAnalyticsController(analyticsService)
 	dashboardController := controllers.NewDashboardController(dashboardService)
 	adminController := controllers.NewAdminController(userRepo)

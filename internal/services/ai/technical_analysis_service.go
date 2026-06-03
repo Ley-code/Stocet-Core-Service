@@ -335,6 +335,115 @@ func bollingerLast(closes []float64, period int, sigma float64) (mid, upper, low
 
 func ptrF(v float64) *float64 { return &v }
 
+// ComputeFullIndicators calculates the default indicator bundle used by
+// market-data HTTP endpoints.
+func (s *TechnicalAnalysisService) ComputeFullIndicators(ctx context.Context, ticker string, periodDays int) (map[string]interface{}, error) {
+	if s == nil || s.repo == nil {
+		return nil, errors.New("ta: repository not configured")
+	}
+	ticker = strings.TrimSpace(strings.ToUpper(ticker))
+	if ticker == "" {
+		return nil, errors.New("ta: empty ticker")
+	}
+	if periodDays <= 0 {
+		periodDays = 30
+	}
+
+	end := time.Now().UTC()
+	start := end.AddDate(0, 0, -periodDays)
+	prices, err := s.repo.GetByTickerAndDateRange(ticker, start, end)
+	if err != nil {
+		return nil, err
+	}
+
+	empty := map[string]interface{}{
+		"ticker_symbol":        ticker,
+		"sma_20":               nil,
+		"sma_50":               nil,
+		"ema_12":               nil,
+		"ema_20":               nil,
+		"rsi":                  nil,
+		"rsi_signal":           nil,
+		"macd":                 nil,
+		"macd_signal":          nil,
+		"macd_histogram":       nil,
+		"bollinger_upper":      nil,
+		"bollinger_middle":     nil,
+		"bollinger_lower":      nil,
+		"latest_price":         nil,
+		"price_change":         nil,
+		"price_change_percent": nil,
+		"data_points":          0,
+		"period_days":          periodDays,
+	}
+	if len(prices) == 0 {
+		return empty, nil
+	}
+
+	closes := make([]float64, len(prices))
+	for i, p := range prices {
+		closes[i] = p.Price
+	}
+	latestPrice := closes[len(closes)-1]
+
+	result := map[string]interface{}{
+		"ticker_symbol":        ticker,
+		"sma_20":               nil,
+		"sma_50":               nil,
+		"ema_12":               nil,
+		"ema_20":               nil,
+		"rsi":                  nil,
+		"rsi_signal":           nil,
+		"macd":                 nil,
+		"macd_signal":          nil,
+		"macd_histogram":       nil,
+		"bollinger_upper":      nil,
+		"bollinger_middle":     nil,
+		"bollinger_lower":      nil,
+		"latest_price":         latestPrice,
+		"price_change":         nil,
+		"price_change_percent": nil,
+		"data_points":          len(closes),
+		"period_days":          periodDays,
+	}
+
+	firstPrice := closes[0]
+	priceChange := latestPrice - firstPrice
+	result["price_change"] = priceChange
+	if firstPrice != 0 {
+		result["price_change_percent"] = (priceChange / firstPrice) * 100
+	}
+
+	if v, calcErr := smaLast(closes, 20); calcErr == nil {
+		result["sma_20"] = v
+	}
+	if v, calcErr := smaLast(closes, 50); calcErr == nil {
+		result["sma_50"] = v
+	}
+	if v, calcErr := emaLast(closes, 12); calcErr == nil {
+		result["ema_12"] = v
+	}
+	if v, calcErr := emaLast(closes, 20); calcErr == nil {
+		result["ema_20"] = v
+	}
+	if v, calcErr := rsiLast(closes, 14); calcErr == nil {
+		result["rsi"] = v
+		result["rsi_signal"] = rsiSignal(v)
+	}
+	if macd, signal, hist, calcErr := macdLast(closes, 12, 26, 9); calcErr == nil {
+		result["macd"] = macd
+		result["macd_signal"] = signal
+		result["macd_histogram"] = hist
+	}
+	if mid, up, low, calcErr := bollingerLast(closes, 20, 2.0); calcErr == nil {
+		result["bollinger_middle"] = mid
+		result["bollinger_upper"] = up
+		result["bollinger_lower"] = low
+	}
+
+	return result, nil
+}
+
 // Compile-time assertion that we keep importing the prices model so future
 // refactors don't accidentally drop the dependency.
 var _ = models.MarketPrice{}

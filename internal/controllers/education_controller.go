@@ -101,6 +101,90 @@ func (c *EducationController) ListGlossary(ctx *gin.Context) {
 	}, "")
 }
 
+func (c *EducationController) GetCourseProgress(ctx *gin.Context) {
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
+	courseID := ctx.Param("course_id")
+
+	progress, err := c.service.GetCourseProgress(userID, courseID)
+	if err != nil {
+		utils.InternalServerError(ctx, err, "Failed to fetch course progress")
+		return
+	}
+
+	utils.SuccessResponse(ctx, 200, progress, "")
+}
+
+func (c *EducationController) MarkLessonComplete(ctx *gin.Context) {
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
+	lessonID := ctx.Param("id")
+
+	result, err := c.service.MarkLessonComplete(userID, lessonID)
+	if err != nil {
+		utils.BadRequest(ctx, err.Error())
+		return
+	}
+
+	utils.SuccessResponse(ctx, 200, result, "Lesson marked as complete")
+}
+
+func (c *EducationController) GetUserStats(ctx *gin.Context) {
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
+
+	stats, err := c.service.GetUserStats(userID)
+	if err != nil {
+		utils.InternalServerError(ctx, err, "Failed to fetch stats")
+		return
+	}
+
+	utils.SuccessResponse(ctx, 200, stats, "")
+}
+
+func (c *EducationController) GetCertificates(ctx *gin.Context) {
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
+
+	certificates, err := c.service.GetCertificates(userID)
+	if err != nil {
+		utils.InternalServerError(ctx, err, "Failed to fetch certificates")
+		return
+	}
+
+	utils.SuccessResponse(ctx, 200, certificates, "")
+}
+
+func (c *EducationController) ReorderLessons(ctx *gin.Context) {
+	courseID := ctx.Param("id")
+	var req struct {
+		OrderedLessonIDs []string `json:"ordered_lesson_ids" binding:"required"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(ctx, "Invalid request body")
+		return
+	}
+
+	if err := c.service.ReorderLessons(courseID, req.OrderedLessonIDs); err != nil {
+		utils.BadRequest(ctx, err.Error())
+		return
+	}
+
+	utils.SuccessResponse(ctx, 200, gin.H{"ordered_lesson_ids": req.OrderedLessonIDs}, "Lessons reordered successfully")
+}
+
 // Admin endpoints
 func (c *EducationController) CreateCourse(ctx *gin.Context) {
 	var course models.Course

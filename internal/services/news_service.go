@@ -25,8 +25,28 @@ func (s *NewsService) DeleteNews(id string) error {
 	return s.repo.DeleteNews(id)
 }
 
+func (s *NewsService) GetRelatedArticles(articleID string, limit int) ([]repositories.NewsArticle, error) {
+	return s.repo.GetRelatedArticles(articleID, limit)
+}
+
+func (s *NewsService) GetTrendingArticles(limit, hours int) ([]repositories.NewsArticle, error) {
+	return s.repo.GetTrendingArticles(limit, hours)
+}
+
+func (s *NewsService) GetForYouArticles(userID string, tickers []string, limit int) ([]repositories.NewsArticle, error) {
+	return s.repo.GetForYouArticles(userID, tickers, limit)
+}
+
 // BuildFilters builds filter map from query parameters
-func (s *NewsService) BuildFilters(category, source, searchText, sentiment string, startDate, endDate *time.Time) map[string]interface{} {
+func (s *NewsService) BuildFilters(
+	category,
+	source,
+	searchText,
+	sentiment,
+	ticker string,
+	startDate,
+	endDate *time.Time,
+) map[string]interface{} {
 	filters := make(map[string]interface{})
 
 	if category != "" {
@@ -39,6 +59,10 @@ func (s *NewsService) BuildFilters(category, source, searchText, sentiment strin
 
 	if sentiment != "" {
 		filters["sentiment"] = sentiment
+	}
+
+	if ticker != "" {
+		filters["ticker"] = ticker
 	}
 
 	if searchText != "" {

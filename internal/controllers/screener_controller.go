@@ -42,7 +42,8 @@ var allowedSortCols = map[string]string{
 
 // Search godoc — GET /screener
 // Query params: sector, min_pe, max_pe, min_market_cap, max_market_cap,
-//               min_change, max_change, sort_by, sort_dir
+//
+//	min_change, max_change, sort_by, sort_dir
 func (c *ScreenerController) Search(ctx *gin.Context) {
 	sector := strings.TrimSpace(ctx.Query("sector"))
 	minPE := parseFloat(ctx.Query("min_pe"))
@@ -156,11 +157,20 @@ WHERE 1=1`
 		}
 	}
 
-	base += fmt.Sprintf(" ORDER BY %s %s NULLS LAST", sortCol, sortDir)
-	base += fmt.Sprintf(" LIMIT %s OFFSET %s", ph(), ph())
+	filteredQuery := base
+	countQuery := "SELECT COUNT(*) FROM (" + filteredQuery + ") AS screener_filtered"
+	var total int64
+	if err := database.DB.Raw(countQuery, args...).Scan(&total).Error; err != nil {
+		utils.InternalServerError(ctx, err, "Screener count query failed")
+		return
+	}
+
+	dataQuery := filteredQuery
+	dataQuery += fmt.Sprintf(" ORDER BY %s %s NULLS LAST", sortCol, sortDir)
+	dataQuery += fmt.Sprintf(" LIMIT %s OFFSET %s", ph(), ph())
 	args = append(args, limit, skip)
 
-	rows, err := database.DB.Raw(base, args...).Rows()
+	rows, err := database.DB.Raw(dataQuery, args...).Rows()
 	if err != nil {
 		utils.InternalServerError(ctx, err, "Screener query failed")
 		return
@@ -182,7 +192,7 @@ WHERE 1=1`
 		results = append(results, r)
 	}
 
-	utils.SuccessResponse(ctx, 200, gin.H{"results": results, "total": len(results)}, "")
+	utils.SuccessResponse(ctx, 200, gin.H{"results": results, "total": total}, "")
 }
 
 func parseFloat(s string) *float64 {

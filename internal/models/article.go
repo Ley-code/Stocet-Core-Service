@@ -18,6 +18,7 @@ type Article struct {
 	Tags                pq.StringArray `gorm:"column:tags;type:text[]" json:"tags"`
 	ImageURL            string         `gorm:"column:image_url" json:"image_url,omitempty"`
 	Sentiment           string         `gorm:"column:sentiment" json:"sentiment,omitempty"`
+	SentimentConfidence *float64       `gorm:"column:sentiment_confidence" json:"sentiment_confidence,omitempty"`
 	SentimentTickers    pq.StringArray `gorm:"column:sentiment_tickers;type:text[]" json:"sentiment_tickers,omitempty"`
 	SentimentAnalyzedAt *time.Time     `gorm:"column:sentiment_analyzed_at" json:"sentiment_analyzed_at,omitempty"`
 	CreatedAt           time.Time      `gorm:"column:created_at;autoCreateTime" json:"created_at"`

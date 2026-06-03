@@ -3,6 +3,7 @@ package services
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"stocet-core-service/internal/models"
 	"stocet-core-service/internal/repositories"
 
@@ -147,4 +148,94 @@ func (s *EducationService) UpdateGlossaryTerm(term *models.GlossaryTerm) error {
 
 func (s *EducationService) DeleteGlossaryTerm(id string) error {
 	return s.repo.DeleteGlossaryTerm(id)
+}
+
+func (s *EducationService) GetCourseProgress(userID, courseID string) (map[string]interface{}, error) {
+	completedLessonIDs, totalLessons, err := s.repo.GetCourseProgress(userID, courseID)
+	if err != nil {
+		return nil, err
+	}
+	stats, err := s.repo.GetUserStats(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"completed_lesson_ids": completedLessonIDs,
+		"course_stats": map[string]interface{}{
+			"total_lessons":     totalLessons,
+			"completed_lessons": len(completedLessonIDs),
+			"completion_rate":   calculateRate(len(completedLessonIDs), totalLessons),
+		},
+		"user_stats": stats,
+	}, nil
+}
+
+func (s *EducationService) MarkLessonComplete(userID, lessonID string) (map[string]interface{}, error) {
+	lesson, err := s.repo.GetLessonByID(lessonID)
+	if err != nil {
+		return nil, errors.New("lesson not found")
+	}
+
+	courseID := lesson.CourseID
+	stats, awardedXP, err := s.repo.MarkLessonComplete(userID, lessonID, courseID)
+	if err != nil {
+		return nil, err
+	}
+
+	certificate, issued, err := s.repo.IssueCertificate(userID, courseID)
+	if err != nil {
+		return nil, err
+	}
+
+	return map[string]interface{}{
+		"lesson_id":             lessonID,
+		"course_id":             courseID,
+		"awarded_xp":            ternaryXP(awardedXP),
+		"stats":                 stats,
+		"certificate_issued":    issued,
+		"issued_certificate":    certificate,
+		"already_completed":     !awardedXP,
+		"completion_recorded_at": nil,
+	}, nil
+}
+
+func (s *EducationService) GetUserStats(userID string) (*models.UserEducationStats, error) {
+	return s.repo.GetUserStats(userID)
+}
+
+func (s *EducationService) GetCertificates(userID string) ([]models.CourseCertificate, error) {
+	return s.repo.GetCertificates(userID)
+}
+
+func (s *EducationService) ReorderLessons(courseID string, orderedLessonIDs []string) error {
+	if len(orderedLessonIDs) == 0 {
+		return errors.New("ordered lesson IDs are required")
+	}
+	return s.repo.ReorderLessons(courseID, orderedLessonIDs)
+}
+
+func calculateRate(completed int, total int64) float64 {
+	if total == 0 {
+		return 0
+	}
+	return (float64(completed) / float64(total)) * 100
+}
+
+func ternaryXP(awarded bool) int {
+	if awarded {
+		return 10
+	}
+	return 0
+}
+
+func (s *EducationService) ValidateCourseAndLesson(courseID, lessonID string) error {
+	lesson, err := s.repo.GetLessonByID(lessonID)
+	if err != nil {
+		return errors.New("lesson not found")
+	}
+	if lesson.CourseID != courseID {
+		return fmt.Errorf("lesson does not belong to course")
+	}
+	return nil
 }

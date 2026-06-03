@@ -12,15 +12,25 @@ func SetupNewsRoutes(
 	controller *controllers.NewsController,
 	interactionsController *controllers.ArticleInteractionsController,
 ) {
-	news := router.Group("/news", middleware.AuthMiddleware())
+	news := router.Group("/news")
 	{
 		news.GET("", middleware.RateLimitWhenQuery("q", 30, 30), controller.GetNews)
-		news.DELETE("/:id", middleware.RequireAdmin(), controller.DeleteNews)
+		news.GET("/trending", controller.GetTrendingNews)
+		news.GET("/:id/related", controller.GetRelatedNews)
+	}
 
-		news.DELETE("/comments/:comment_id", interactionsController.DeleteComment)
-		news.POST("/:id/like", interactionsController.ToggleLike)
-		news.GET("/:id/likes/count", interactionsController.GetLikeStatus)
-		news.GET("/:id/comments", interactionsController.GetComments)
-		news.POST("/:id/comments", interactionsController.CreateComment)
+	protected := news.Group("", middleware.AuthMiddleware())
+	{
+		protected.GET("/for-you", controller.GetForYouNews)
+		protected.GET("/bookmarks", controller.GetBookmarks)
+		protected.POST("/bookmarks", controller.AddBookmark)
+		protected.DELETE("/bookmarks", controller.RemoveBookmark)
+		protected.DELETE("/:id", middleware.RequireAdmin(), controller.DeleteNews)
+
+		protected.DELETE("/comments/:comment_id", interactionsController.DeleteComment)
+		protected.POST("/:id/like", interactionsController.ToggleLike)
+		protected.GET("/:id/likes/count", interactionsController.GetLikeStatus)
+		protected.GET("/:id/comments", interactionsController.GetComments)
+		protected.POST("/:id/comments", interactionsController.CreateComment)
 	}
 }

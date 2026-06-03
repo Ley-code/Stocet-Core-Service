@@ -20,16 +20,17 @@ type Course struct {
 }
 
 type Lesson struct {
-	ID        string         `gorm:"primaryKey;type:uuid;default:gen_random_uuid()" json:"id"`
-	CourseID  string         `gorm:"type:uuid;not null;index" json:"course_id"`
-	Title     string         `gorm:"not null" json:"title"`
-	Content   string         `gorm:"type:text" json:"content"`
-	VideoURL  string         `gorm:"type:text" json:"video_url"`
-	Order     int            `json:"order"`
-	Quiz      *Quiz          `gorm:"foreignKey:LessonID" json:"quiz,omitempty"`
-	CreatedAt time.Time      `json:"created_at"`
-	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `gorm:"index" json:"-"`
+	ID                   string         `gorm:"primaryKey;type:uuid;default:gen_random_uuid()" json:"id"`
+	CourseID             string         `gorm:"type:uuid;not null;index" json:"course_id"`
+	Title                string         `gorm:"not null" json:"title"`
+	Content              string         `gorm:"type:text" json:"content"`
+	VideoURL             string         `gorm:"type:text" json:"video_url"`
+	Order                int            `json:"order"`
+	PrerequisiteLessonID *string        `gorm:"type:uuid" json:"prerequisite_lesson_id,omitempty"`
+	Quiz                 *Quiz          `gorm:"foreignKey:LessonID" json:"quiz,omitempty"`
+	CreatedAt            time.Time      `json:"created_at"`
+	UpdatedAt            time.Time      `json:"updated_at"`
+	DeletedAt            gorm.DeletedAt `gorm:"index" json:"-"`
 }
 
 type Quiz struct {
@@ -67,6 +68,29 @@ type QuizSubmission struct {
 	CreatedAt time.Time      `json:"created_at"`
 }
 
+type LessonProgress struct {
+	UserID      uuid.UUID  `gorm:"type:uuid;primaryKey" json:"user_id"`
+	LessonID    uuid.UUID  `gorm:"type:uuid;primaryKey" json:"lesson_id"`
+	CourseID    uuid.UUID  `gorm:"type:uuid;not null;index" json:"course_id"`
+	Completed   bool       `gorm:"not null;default:false" json:"completed"`
+	CompletedAt *time.Time `json:"completed_at,omitempty"`
+}
+
+type UserEducationStats struct {
+	UserID           uuid.UUID  `gorm:"type:uuid;primaryKey" json:"user_id"`
+	TotalXP          int        `gorm:"not null;default:0" json:"total_xp"`
+	CurrentStreak    int        `gorm:"not null;default:0" json:"current_streak"`
+	LongestStreak    int        `gorm:"not null;default:0" json:"longest_streak"`
+	LastActivityDate *time.Time `gorm:"type:date" json:"last_activity_date,omitempty"`
+}
+
+type CourseCertificate struct {
+	ID       uuid.UUID `gorm:"type:uuid;primaryKey;default:gen_random_uuid()" json:"id"`
+	UserID   uuid.UUID `gorm:"type:uuid;not null;index" json:"user_id"`
+	CourseID uuid.UUID `gorm:"type:uuid;not null;index" json:"course_id"`
+	IssuedAt time.Time `json:"issued_at"`
+}
+
 // TableName methods
 func (Course) TableName() string {
 	return "courses"
@@ -90,4 +114,16 @@ func (GlossaryTerm) TableName() string {
 
 func (QuizSubmission) TableName() string {
 	return "quiz_submissions"
+}
+
+func (LessonProgress) TableName() string {
+	return "lesson_progress"
+}
+
+func (UserEducationStats) TableName() string {
+	return "user_education_stats"
+}
+
+func (CourseCertificate) TableName() string {
+	return "course_certificates"
 }

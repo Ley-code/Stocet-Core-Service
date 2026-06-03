@@ -12,5 +12,5 @@ type SentimentArticle struct {
 // SentimentBackfillRepository is the minimal interface the sentiment backfill worker needs.
 type SentimentBackfillRepository interface {
 	GetUnanalyzed(limit int) ([]SentimentArticle, error)
-	UpdateSentiment(ctx context.Context, id string, sentiment string, tickers []string) error
+	UpdateSentiment(ctx context.Context, id string, sentiment string, tickers []string, confidence *float64) error
 }

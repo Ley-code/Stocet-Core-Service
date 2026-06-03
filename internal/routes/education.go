@@ -15,6 +15,10 @@ func SetupEducationRoutes(router *gin.RouterGroup, controller *controllers.Educa
 		education.GET("/lessons/:id", controller.GetLesson)
 		education.POST("/quizzes/:lesson_id/submit", middleware.AuthMiddleware(), controller.SubmitQuiz)
 		education.GET("/glossary", controller.ListGlossary)
+		education.GET("/progress/:course_id", middleware.AuthMiddleware(), controller.GetCourseProgress)
+		education.POST("/lessons/:id/complete", middleware.AuthMiddleware(), controller.MarkLessonComplete)
+		education.GET("/stats", middleware.AuthMiddleware(), controller.GetUserStats)
+		education.GET("/certificates", middleware.AuthMiddleware(), controller.GetCertificates)
 
 		// Admin endpoints
 		admin := education.Group("", middleware.AuthMiddleware(), middleware.RequireAdmin())
@@ -28,6 +32,7 @@ func SetupEducationRoutes(router *gin.RouterGroup, controller *controllers.Educa
 			admin.POST("/glossary", controller.CreateGlossaryTerm)
 			admin.PUT("/glossary/:id", controller.UpdateGlossaryTerm)
 			admin.DELETE("/glossary/:id", controller.DeleteGlossaryTerm)
+			admin.PUT("/courses/:id/lessons/reorder", controller.ReorderLessons)
 		}
 	}
 }

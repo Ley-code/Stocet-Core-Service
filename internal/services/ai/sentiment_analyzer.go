@@ -81,6 +81,12 @@ Rules:
 	if result.Tickers == nil {
 		result.Tickers = []string{}
 	}
+	if result.Confidence < 0 {
+		result.Confidence = 0
+	}
+	if result.Confidence > 1 {
+		result.Confidence = 1
+	}
 
 	return &result, nil
 }
@@ -109,13 +115,13 @@ func RunSentimentBackfillOnce(ctx context.Context, client *GeminiClient, repo re
 		result, err := ClassifyNewsSentiment(ctx, client, article.Title, article.Summary)
 		if err != nil {
 			log.Printf("[sentiment] skipping article %v: %v", article.ID, err)
-			if updateErr := repo.UpdateSentiment(ctx, article.ID, "neutral", []string{}); updateErr != nil {
+			if updateErr := repo.UpdateSentiment(ctx, article.ID, "neutral", []string{}, nil); updateErr != nil {
 				log.Printf("[sentiment] update failed for %v: %v", article.ID, updateErr)
 			}
 			continue
 		}
 
-		if err := repo.UpdateSentiment(ctx, article.ID, result.Sentiment, result.Tickers); err != nil {
+		if err := repo.UpdateSentiment(ctx, article.ID, result.Sentiment, result.Tickers, &result.Confidence); err != nil {
 			log.Printf("[sentiment] update failed for %v: %v", article.ID, err)
 			continue
 		}
