@@ -13,14 +13,19 @@ func NewVerificationCodeRepository() *VerificationCodeRepository {
 	return &VerificationCodeRepository{}
 }
 
-func (r *VerificationCodeRepository) UpsertActiveCode(email, codeHash string, expiresAt time.Time) error {
-	// Ensure there is only one active OTP per email.
-	if err := database.DB.Where("email = ? AND used_at IS NULL", email).Delete(&models.VerificationCode{}).Error; err != nil {
+func (r *VerificationCodeRepository) UpsertActiveCode(email, codeHash string, expiresAt time.Time, purpose string) error {
+	if purpose == "" {
+		purpose = models.VerificationPurposeEmail
+	}
+
+	if err := database.DB.Where("email = ? AND purpose = ? AND used_at IS NULL", email, purpose).
+		Delete(&models.VerificationCode{}).Error; err != nil {
 		return err
 	}
 
 	code := &models.VerificationCode{
 		Email:     email,
+		Purpose:   purpose,
 		CodeHash:  codeHash,
 		ExpiresAt: expiresAt,
 	}
@@ -28,10 +33,14 @@ func (r *VerificationCodeRepository) UpsertActiveCode(email, codeHash string, ex
 	return database.DB.Create(code).Error
 }
 
-func (r *VerificationCodeRepository) GetLatestActiveByEmail(email string) (*models.VerificationCode, error) {
+func (r *VerificationCodeRepository) GetLatestActiveByEmailAndPurpose(email, purpose string) (*models.VerificationCode, error) {
+	if purpose == "" {
+		purpose = models.VerificationPurposeEmail
+	}
+
 	var code models.VerificationCode
 	err := database.DB.
-		Where("email = ? AND used_at IS NULL", email).
+		Where("email = ? AND purpose = ? AND used_at IS NULL", email, purpose).
 		Order("created_at DESC").
 		First(&code).Error
 	if err != nil {

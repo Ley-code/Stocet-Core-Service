@@ -108,6 +108,36 @@ func (c *AuthController) ResendVerification(ctx *gin.Context) {
 	utils.SuccessResponse(ctx, 200, nil, "A new verification code has been sent to your email")
 }
 
+func (c *AuthController) ForgotPassword(ctx *gin.Context) {
+	var req services.ForgotPasswordRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(ctx, "Please provide a valid email address")
+		return
+	}
+
+	if err := c.service.ForgotPassword(req.Email); err != nil {
+		utils.BadRequest(ctx, err.Error())
+		return
+	}
+
+	utils.SuccessResponse(ctx, 200, nil, "If an account exists for that email, a reset code has been sent")
+}
+
+func (c *AuthController) ResetPassword(ctx *gin.Context) {
+	var req services.ResetPasswordRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(ctx, "email, code, and new_password are required")
+		return
+	}
+
+	if err := c.service.ResetPassword(req); err != nil {
+		utils.BadRequest(ctx, err.Error())
+		return
+	}
+
+	utils.SuccessResponse(ctx, 200, nil, "Password reset successfully")
+}
+
 // GetMe returns the currently authenticated user's profile
 func (c *AuthController) GetMe(ctx *gin.Context) {
 	userID, ok := utils.GetUserID(ctx)

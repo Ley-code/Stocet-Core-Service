@@ -285,7 +285,7 @@ func (s *AuthService) Signup(req SignupRequest) (*SignupResponse, error) {
 	codeHash := hashVerificationCode(code)
 	expiresAt := time.Now().UTC().Add(3 * time.Minute)
 
-	if err := s.verificationCodeRepo.UpsertActiveCode(email, codeHash, expiresAt); err != nil {
+	if err := s.verificationCodeRepo.UpsertActiveCode(email, codeHash, expiresAt, models.VerificationPurposeEmail); err != nil {
 		_ = s.userRepo.Delete(user.ID)
 		_ = s.inviteCodeRepo.Release(inviteTrim)
 		return nil, errors.New("failed to store verification code")
@@ -326,7 +326,7 @@ func (s *AuthService) VerifyEmail(req VerifyEmailRequest) (*VerifyEmailResponse,
 		return nil, errors.New("too many failed attempts, try again later")
 	}
 
-	verificationCode, err := s.verificationCodeRepo.GetLatestActiveByEmail(email)
+	verificationCode, err := s.verificationCodeRepo.GetLatestActiveByEmailAndPurpose(email, models.VerificationPurposeEmail)
 	if err != nil {
 		return nil, errors.New("invalid or expired verification code")
 	}
@@ -403,6 +403,147 @@ func (s *AuthService) sendVerificationEmail(toEmail, fullName, code string) erro
 	return s.mailer.SendHTML(toEmail, subject, htmlBody)
 }
 
+type ForgotPasswordRequest struct {
+	Email string `json:"email" binding:"required"`
+}
+
+type ResetPasswordRequest struct {
+	Email       string `json:"email" binding:"required"`
+	Code        string `json:"code" binding:"required"`
+	NewPassword string `json:"new_password" binding:"required"`
+}
+
+// ForgotPassword sends a password reset code to the user's email if the account exists.
+// Always returns nil to avoid leaking whether an email is registered.
+func (s *AuthService) ForgotPassword(emailAddr string) error {
+	emailAddr = strings.ToLower(strings.TrimSpace(emailAddr))
+
+	if !utils.ValidateEmail(emailAddr) {
+		return errors.New("invalid email format")
+	}
+
+	user, err := s.userRepo.GetByEmail(emailAddr)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil
+		}
+		return errors.New("failed to process request")
+	}
+
+	code, err := generateVerificationCode()
+	if err != nil {
+		return errors.New("failed to generate reset code")
+	}
+
+	codeHash := hashVerificationCode(code)
+	expiresAt := time.Now().UTC().Add(15 * time.Minute)
+
+	if err := s.verificationCodeRepo.UpsertActiveCode(emailAddr, codeHash, expiresAt, models.VerificationPurposePasswordReset); err != nil {
+		return errors.New("failed to store reset code")
+	}
+
+	displayName := user.DisplayName()
+	go func() {
+		if err := s.sendPasswordResetEmail(emailAddr, displayName, code); err != nil {
+			log.Printf("[auth] password reset email failed for %s: %v", emailAddr, err)
+		}
+	}()
+
+	return nil
+}
+
+func (s *AuthService) sendPasswordResetEmail(toEmail, fullName, code string) error {
+	if s.mailer == nil || !s.mailer.Enabled() {
+		return errors.New("email delivery is currently unavailable")
+	}
+
+	subject := "Reset your STOCET password"
+	htmlBody := fmt.Sprintf(`
+<!doctype html>
+<html>
+  <body style="margin:0;padding:0;background:#f6f8fb;font-family:Arial,sans-serif;color:#111827;">
+    <table role="presentation" width="100%%" cellpadding="0" cellspacing="0" style="padding:24px 12px;">
+      <tr>
+        <td align="center">
+          <table role="presentation" width="560" cellpadding="0" cellspacing="0" style="background:#ffffff;border:1px solid #e5e7eb;border-radius:10px;padding:28px;">
+            <tr><td style="font-size:20px;font-weight:700;color:#111827;padding-bottom:8px;">STOCET Password Reset</td></tr>
+            <tr><td style="font-size:14px;color:#374151;padding-bottom:20px;">Hi %s, use the code below to reset your password.</td></tr>
+            <tr>
+              <td align="center" style="padding:8px 0 20px 0;">
+                <div style="display:inline-block;font-size:28px;letter-spacing:6px;font-weight:700;padding:12px 20px;border:1px solid #d1d5db;border-radius:8px;background:#f9fafb;">%s</div>
+              </td>
+            </tr>
+            <tr><td style="font-size:13px;color:#6b7280;padding-bottom:8px;">This code expires in 15 minutes.</td></tr>
+            <tr><td style="font-size:12px;color:#9ca3af;">If you did not request a password reset, you can safely ignore this email.</td></tr>
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>`, fullName, code)
+
+	return s.mailer.SendHTML(toEmail, subject, htmlBody)
+}
+
+// ResetPassword verifies a reset code and updates the user's password.
+func (s *AuthService) ResetPassword(req ResetPasswordRequest) error {
+	email := strings.ToLower(strings.TrimSpace(req.Email))
+	code := strings.TrimSpace(req.Code)
+
+	if !utils.ValidateEmail(email) {
+		return errors.New("invalid email format")
+	}
+	if len(code) != 6 {
+		return errors.New("reset code must be 6 digits")
+	}
+	if !utils.ValidatePassword(req.NewPassword) {
+		return errors.New("password must be at least 8 characters with at least one letter and one number")
+	}
+
+	lockKey := "reset:" + email
+	if checkOTPLockout(lockKey) {
+		return errors.New("too many failed attempts, try again later")
+	}
+
+	verificationCode, err := s.verificationCodeRepo.GetLatestActiveByEmailAndPurpose(email, models.VerificationPurposePasswordReset)
+	if err != nil {
+		return errors.New("invalid or expired reset code")
+	}
+
+	if verificationCode.ExpiresAt.Before(time.Now().UTC()) {
+		return errors.New("reset code has expired")
+	}
+
+	if verificationCode.CodeHash != hashVerificationCode(code) {
+		recordOTPFailedAttempt(lockKey)
+		return errors.New("invalid or expired reset code")
+	}
+
+	clearOTPAttempts(lockKey)
+
+	user, err := s.userRepo.GetByEmail(email)
+	if err != nil {
+		return errors.New("account not found")
+	}
+
+	hashed, err := utils.HashPassword(req.NewPassword)
+	if err != nil {
+		return errors.New("failed to hash password")
+	}
+
+	if err := s.userRepo.UpdateFields(user.ID, map[string]interface{}{
+		"password_hash": hashed,
+	}); err != nil {
+		return errors.New("failed to update password")
+	}
+
+	if err := s.verificationCodeRepo.MarkUsed(verificationCode.ID); err != nil {
+		return errors.New("failed to finalize password reset")
+	}
+
+	return nil
+}
+
 // ResendVerification generates a new verification code and sends it to the user's email.
 func (s *AuthService) ResendVerification(emailAddr string) error {
 	emailAddr = strings.ToLower(strings.TrimSpace(emailAddr))
@@ -428,7 +569,7 @@ func (s *AuthService) ResendVerification(emailAddr string) error {
 	codeHash := hashVerificationCode(code)
 	expiresAt := time.Now().UTC().Add(3 * time.Minute)
 
-	if err := s.verificationCodeRepo.UpsertActiveCode(emailAddr, codeHash, expiresAt); err != nil {
+	if err := s.verificationCodeRepo.UpsertActiveCode(emailAddr, codeHash, expiresAt, models.VerificationPurposeEmail); err != nil {
 		return errors.New("failed to store verification code")
 	}
 
