@@ -195,6 +195,53 @@ func (r *FundamentalAnalysisRepository) DeleteCorporateNews(id string) error {
 	return database.DB.Delete(&models.CorporateNews{}, "id = ?", id).Error
 }
 
+// Company filings CRUD
+func (r *FundamentalAnalysisRepository) CreateFiling(filing *models.CompanyFiling) error {
+	return database.DB.Create(filing).Error
+}
+
+func (r *FundamentalAnalysisRepository) GetFilingByID(id string) (*models.CompanyFiling, error) {
+	var f models.CompanyFiling
+	err := database.DB.Where("id = ?", id).First(&f).Error
+	if err != nil {
+		return nil, err
+	}
+	return &f, nil
+}
+
+func (r *FundamentalAnalysisRepository) ListFilingsByCompanyID(companyProfileID string, limit, offset int) ([]models.CompanyFiling, int64, error) {
+	var items []models.CompanyFiling
+	var total int64
+	q := database.DB.Model(&models.CompanyFiling{}).Where("company_profile_id = ?", companyProfileID)
+	if err := q.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+	err := database.DB.
+		Where("company_profile_id = ?", companyProfileID).
+		Order("filed_at DESC").
+		Limit(limit).
+		Offset(offset).
+		Find(&items).Error
+	return items, total, err
+}
+
+func (r *FundamentalAnalysisRepository) ListFilingsByTicker(ticker string, limit, offset int) ([]models.CompanyFiling, int64, error) {
+	var profile models.CompanyProfile
+	if err := database.DB.Where("ticker_symbol = ?", strings.ToUpper(strings.TrimSpace(ticker))).
+		First(&profile).Error; err != nil {
+		return nil, 0, err
+	}
+	return r.ListFilingsByCompanyID(profile.ID, limit, offset)
+}
+
+func (r *FundamentalAnalysisRepository) UpdateFiling(filing *models.CompanyFiling) error {
+	return database.DB.Save(filing).Error
+}
+
+func (r *FundamentalAnalysisRepository) DeleteFiling(id string) error {
+	return database.DB.Delete(&models.CompanyFiling{}, "id = ?", id).Error
+}
+
 // Latest EPS is fetched from the PostgreSQL view (company_latest_eps)
 // to avoid recalculating a "latest by period" subquery in every request.
 func (r *FundamentalAnalysisRepository) GetLatestEPSByTicker(ticker string) (*models.CompanyLatestEPS, error) {

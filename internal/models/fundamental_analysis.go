@@ -16,6 +16,32 @@ const (
 	CorporateNewsCategoryGeneral         CorporateNewsCategory = "General"
 )
 
+type FilingType string
+
+const (
+	FilingTypeAnnualReport      FilingType = "Annual Report"
+	FilingTypeInterimReport     FilingType = "Interim Report"
+	FilingTypeProspectus        FilingType = "Prospectus"
+	FilingTypeRightsIssue       FilingType = "Rights Issue"
+	FilingTypeAGMNotice         FilingType = "AGM Notice"
+	FilingTypeMaterialDisclosure FilingType = "Material Disclosure"
+	FilingTypeOther             FilingType = "Other"
+)
+
+type CompanyFiling struct {
+	ID               string     `gorm:"primaryKey;type:uuid;default:gen_random_uuid()" json:"id"`
+	CompanyProfileID string     `gorm:"column:company_profile_id;type:uuid;not null;index:idx_company_filings_company_profile_id;index:idx_company_filings_company_filed_at_desc,priority:1" json:"company_profile_id"`
+	FilingType       FilingType `gorm:"column:filing_type;type:text;not null" json:"filing_type"`
+	Title            string     `gorm:"column:title;type:text;not null" json:"title"`
+	Description      *string    `gorm:"column:description;type:text" json:"description,omitempty"`
+	DocumentURL      *string    `gorm:"column:document_url;type:text" json:"document_url,omitempty"`
+	FiledAt          time.Time  `gorm:"column:filed_at;type:timestamptz;not null;default:now();index:idx_company_filings_company_filed_at_desc,priority:2,sort:desc" json:"filed_at"`
+	CreatedAt        time.Time  `gorm:"column:created_at;type:timestamptz;not null;default:now()" json:"created_at"`
+	UpdatedAt        time.Time  `gorm:"column:updated_at;type:timestamptz;not null;default:now()" json:"updated_at"`
+}
+
+func (CompanyFiling) TableName() string { return "company_filings" }
+
 type CompanyProfile struct {
 	ID                string            `gorm:"primaryKey;type:uuid;default:gen_random_uuid()" json:"id"`
 	TickerSymbol      string            `gorm:"column:ticker_symbol;type:text;not null;uniqueIndex;index:idx_company_profiles_ticker_symbol" json:"ticker_symbol"`
@@ -37,6 +63,7 @@ type CompanyProfile struct {
 	BoardMembers      []BoardMember     `gorm:"foreignKey:CompanyProfileID" json:"board_members,omitempty"`
 	FinancialReports  []FinancialReport `gorm:"foreignKey:CompanyProfileID" json:"financial_reports,omitempty"`
 	CorporateNews     []CorporateNews   `gorm:"foreignKey:CompanyProfileID" json:"corporate_news,omitempty"`
+	Filings           []CompanyFiling   `gorm:"foreignKey:CompanyProfileID" json:"filings,omitempty"`
 }
 
 func (CompanyProfile) TableName() string {

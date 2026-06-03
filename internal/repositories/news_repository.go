@@ -137,6 +137,10 @@ func (r *NewsRepository) GetNews(filters map[string]interface{}, limit, skip int
 		return nil, err
 	}
 
+	if articles == nil {
+		articles = make([]NewsArticle, 0)
+	}
+
 	return articles, nil
 }
 
@@ -163,7 +167,15 @@ func (r *NewsRepository) GetUnanalyzed(limit int) ([]NewsArticle, error) {
 	defer cursor.Close(ctx)
 
 	var articles []NewsArticle
-	return articles, cursor.All(ctx, &articles)
+	if err := cursor.All(ctx, &articles); err != nil {
+		return nil, err
+	}
+
+	if articles == nil {
+		articles = make([]NewsArticle, 0)
+	}
+
+	return articles, nil
 }
 
 // UpdateSentiment writes the AI-classified sentiment back to an article document.

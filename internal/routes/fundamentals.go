@@ -28,6 +28,9 @@ func RegisterFundamentalsRoutes(admin *gin.RouterGroup, c *controllers.Fundament
 
 		profiles.GET("/:id/corporate-news", c.ListCorporateNews)
 		profiles.POST("/:id/corporate-news", c.CreateCorporateNews)
+
+		profiles.GET("/:id/filings", c.ListFilings)
+		profiles.POST("/:id/filings", c.CreateFiling)
 	}
 
 	f.PUT("/board-members/:memberId", c.UpdateBoardMember)
@@ -39,4 +42,7 @@ func RegisterFundamentalsRoutes(admin *gin.RouterGroup, c *controllers.Fundament
 
 	f.PUT("/corporate-news/:newsId", c.UpdateCorporateNews)
 	f.DELETE("/corporate-news/:newsId", c.DeleteCorporateNews)
+
+	f.PUT("/filings/:filingId", c.UpdateFiling)
+	f.DELETE("/filings/:filingId", c.DeleteFiling)
 }

@@ -29,6 +29,9 @@ type FundamentalsService struct {
 	embedder *ai.Embedder
 }
 
+// Repo exposes the underlying repository for operations not wrapped by the service layer.
+func (s *FundamentalsService) Repo() *repositories.FundamentalAnalysisRepository { return s.repo }
+
 func NewFundamentalsService(repo *repositories.FundamentalAnalysisRepository) *FundamentalsService {
 	return &FundamentalsService{repo: repo}
 }

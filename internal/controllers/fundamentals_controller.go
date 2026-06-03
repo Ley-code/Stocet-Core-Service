@@ -369,3 +369,127 @@ func (ctrl *FundamentalsController) DownloadImportTemplate(c *gin.Context) {
 	c.Header("Content-Disposition", `attachment; filename="financial_reports_template.csv"`)
 	c.Data(http.StatusOK, "text/csv; charset=utf-8", []byte(services.TemplateCSV()))
 }
+
+// ── Company Filings ─────────────────────────────────────────────────────────────
+
+// ListFilings godoc — GET /admin/fundamentals/company-profiles/:id/filings
+func (ctrl *FundamentalsController) ListFilings(c *gin.Context) {
+	profileID := c.Param("id")
+	limit, offset := parseFundamentalsListParams(c)
+	items, total, err := ctrl.svc.Repo().ListFilingsByCompanyID(profileID, limit, offset)
+	if err != nil {
+		utils.InternalServerError(c, err, "Failed to fetch filings")
+		return
+	}
+	utils.SuccessResponse(c, http.StatusOK, gin.H{"filings": items, "total": total}, "")
+}
+
+// CreateFiling godoc — POST /admin/fundamentals/company-profiles/:id/filings
+func (ctrl *FundamentalsController) CreateFiling(c *gin.Context) {
+	profileID := c.Param("id")
+	var body struct {
+		FilingType  string  `json:"filing_type"`
+		Title       string  `json:"title"`
+		Description *string `json:"description"`
+		DocumentURL *string `json:"document_url"`
+		FiledAt     string  `json:"filed_at"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		utils.BadRequest(c, "Invalid request body")
+		return
+	}
+	body.Title = strings.TrimSpace(body.Title)
+	if body.Title == "" {
+		utils.BadRequest(c, "title is required")
+		return
+	}
+	filing := &models.CompanyFiling{
+		CompanyProfileID: profileID,
+		FilingType:       models.FilingType(body.FilingType),
+		Title:            body.Title,
+		Description:      body.Description,
+		DocumentURL:      body.DocumentURL,
+	}
+	if body.FiledAt != "" {
+		if t, err := utils.ParseDate(body.FiledAt); err == nil {
+			filing.FiledAt = t
+		}
+	}
+	if err := ctrl.svc.Repo().CreateFiling(filing); err != nil {
+		utils.InternalServerError(c, err, "Failed to create filing")
+		return
+	}
+	utils.SuccessResponse(c, http.StatusCreated, filing, "Filing created")
+}
+
+// UpdateFiling godoc — PUT /admin/fundamentals/filings/:filingId
+func (ctrl *FundamentalsController) UpdateFiling(c *gin.Context) {
+	f, err := ctrl.svc.Repo().GetFilingByID(c.Param("filingId"))
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			utils.NotFound(c, "Filing not found")
+		} else {
+			utils.InternalServerError(c, err, "Failed to fetch filing")
+		}
+		return
+	}
+	var body struct {
+		FilingType  string  `json:"filing_type"`
+		Title       string  `json:"title"`
+		Description *string `json:"description"`
+		DocumentURL *string `json:"document_url"`
+		FiledAt     string  `json:"filed_at"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		utils.BadRequest(c, "Invalid request body")
+		return
+	}
+	if t := strings.TrimSpace(body.Title); t != "" {
+		f.Title = t
+	}
+	if body.FilingType != "" {
+		f.FilingType = models.FilingType(body.FilingType)
+	}
+	f.Description = body.Description
+	f.DocumentURL = body.DocumentURL
+	if body.FiledAt != "" {
+		if t, err := utils.ParseDate(body.FiledAt); err == nil {
+			f.FiledAt = t
+		}
+	}
+	if err := ctrl.svc.Repo().UpdateFiling(f); err != nil {
+		utils.InternalServerError(c, err, "Failed to update filing")
+		return
+	}
+	utils.SuccessResponse(c, http.StatusOK, f, "Filing updated")
+}
+
+// DeleteFiling godoc — DELETE /admin/fundamentals/filings/:filingId
+func (ctrl *FundamentalsController) DeleteFiling(c *gin.Context) {
+	if err := ctrl.svc.Repo().DeleteFiling(c.Param("filingId")); err != nil {
+		utils.InternalServerError(c, err, "Failed to delete filing")
+		return
+	}
+	utils.SuccessResponse(c, http.StatusOK, nil, "Filing deleted")
+}
+
+// ListFilingsByTicker godoc — GET /fundamentals/filings?ticker=CBE
+// Public (auth required, no admin).
+func (ctrl *FundamentalsController) ListFilingsByTicker(c *gin.Context) {
+	ticker := strings.TrimSpace(c.Query("ticker"))
+	if ticker == "" {
+		utils.BadRequest(c, "ticker query param is required")
+		return
+	}
+	limit, offset := parseFundamentalsListParams(c)
+	items, total, err := ctrl.svc.Repo().ListFilingsByTicker(ticker, limit, offset)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			utils.SuccessResponse(c, http.StatusOK, gin.H{"filings": []interface{}{}, "total": 0}, "")
+			return
+		}
+		utils.InternalServerError(c, err, "Failed to fetch filings")
+		return
+	}
+	utils.SuccessResponse(c, http.StatusOK, gin.H{"filings": items, "total": total}, "")
+}
