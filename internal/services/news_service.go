@@ -3,19 +3,17 @@ package services
 import (
 	"stocet-core-service/internal/repositories"
 	"time"
-
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type NewsService struct {
-	repo *repositories.NewsRepository
+	repo *repositories.PostgresNewsRepository
 }
 
-func NewNewsService(repo *repositories.NewsRepository) *NewsService {
+func NewNewsService(repo *repositories.PostgresNewsRepository) *NewsService {
 	return &NewsService{repo: repo}
 }
 
-func (s *NewsService) GetNews(filters map[string]interface{}, limit, skip int, cursorPublished *time.Time, cursorID *primitive.ObjectID) ([]repositories.NewsArticle, error) {
+func (s *NewsService) GetNews(filters map[string]interface{}, limit, skip int, cursorPublished *time.Time, cursorID *string) ([]repositories.NewsArticle, error) {
 	return s.repo.GetNews(filters, limit, skip, cursorPublished, cursorID)
 }
 

@@ -18,7 +18,7 @@ import (
 type EmbeddingsAdminController struct {
 	embedder *ai.Embedder
 	gemini   *ai.GeminiClient
-	newsRepo *repositories.NewsRepository
+	newsRepo repositories.SentimentBackfillRepository
 }
 
 func NewEmbeddingsAdminController(embedder *ai.Embedder) *EmbeddingsAdminController {
@@ -26,7 +26,7 @@ func NewEmbeddingsAdminController(embedder *ai.Embedder) *EmbeddingsAdminControl
 }
 
 // WithSentiment attaches the Gemini client + news repo needed for sentiment backfill.
-func (c *EmbeddingsAdminController) WithSentiment(gemini *ai.GeminiClient, newsRepo *repositories.NewsRepository) *EmbeddingsAdminController {
+func (c *EmbeddingsAdminController) WithSentiment(gemini *ai.GeminiClient, newsRepo repositories.SentimentBackfillRepository) *EmbeddingsAdminController {
 	c.gemini = gemini
 	c.newsRepo = newsRepo
 	return c

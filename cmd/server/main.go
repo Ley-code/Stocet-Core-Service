@@ -49,11 +49,6 @@ func SetupRouter() *gin.Engine {
 		log.Printf("Warning: Failed to seed initial admin: %v", err)
 	}
 
-	// Initialize MongoDB
-	if err := database.InitMongoDB(); err != nil {
-		log.Fatal("Failed to initialize MongoDB:", err)
-	}
-
 	// Initialize repositories
 	userRepo := repositories.NewUserRepository()
 	cspRepo := repositories.NewCapitalServiceProvidersRepository()
@@ -66,8 +61,8 @@ func SetupRouter() *gin.Engine {
 	verificationCodeRepo := repositories.NewVerificationCodeRepository()
 	inviteCodeRepo := repositories.NewInviteCodeRepository()
 	orgRepo := repositories.NewOrganizationRepository()
-	newsRepo := repositories.NewNewsRepository(database.MongoDBClient)
-	articleInteractionsRepo := repositories.NewArticleInteractionsRepository(database.MongoDBClient)
+	newsRepo := repositories.NewPostgresNewsRepository(database.DB)
+	articleInteractionsRepo := repositories.NewPostgresArticleInteractionsRepository(database.DB)
 	marketDataRepo := repositories.NewMarketDataRepository(database.DB)
 	watchlistRepo := repositories.NewWatchlistRepository()
 	portfolioRepo := repositories.NewPortfolioRepository()
@@ -211,7 +206,6 @@ func main() {
 	} else {
 		// Running locally — standard HTTP server
 		defer database.CloseDB()
-		defer database.CloseMongoDB()
 
 		addr := config.AppConfig.ServerHost + ":" + config.AppConfig.ServerPort
 		log.Printf("Server starting on %s", addr)

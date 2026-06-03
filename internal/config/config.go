@@ -55,6 +55,9 @@ type Config struct {
 	// Firebase Cloud Messaging (push notifications — HTTP v1 API)
 	FCMProjectID          string
 	FCMServiceAccountJSON string
+
+	// Google OAuth
+	GoogleClientID string
 }
 
 var AppConfig *Config
@@ -100,6 +103,8 @@ func LoadConfig() error {
 
 		FCMProjectID:          getEnv("FCM_PROJECT_ID", ""),
 		FCMServiceAccountJSON: getEnv("FCM_SERVICE_ACCOUNT_JSON", ""),
+
+		GoogleClientID: getEnv("GOOGLE_CLIENT_ID", ""),
 	}
 
 	if AppConfig.JWTSecret == "change-me-in-production" && AppConfig.Environment == "production" {

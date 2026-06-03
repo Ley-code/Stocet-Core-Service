@@ -227,6 +227,23 @@ func (c *AuthController) ChangePassword(ctx *gin.Context) {
 	utils.SuccessResponse(ctx, 200, nil, "Password changed successfully")
 }
 
+// GoogleLogin handles POST /auth/google — verifies a Google ID token and returns a Stocet JWT.
+func (c *AuthController) GoogleLogin(ctx *gin.Context) {
+	var req services.GoogleLoginRequest
+	if err := ctx.ShouldBindJSON(&req); err != nil {
+		utils.BadRequest(ctx, "id_token is required")
+		return
+	}
+
+	response, err := c.service.GoogleLogin(req)
+	if err != nil {
+		utils.Unauthorized(ctx, err.Error())
+		return
+	}
+
+	utils.SuccessResponse(ctx, http.StatusOK, response, "Login successful")
+}
+
 // RegisterFCMToken stores the device FCM token for push notifications.
 // Called by the mobile app after obtaining a token from Firebase.
 func (c *AuthController) RegisterFCMToken(ctx *gin.Context) {

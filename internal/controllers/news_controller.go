@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.mongodb.org/mongo-driver/bson/primitive"
 )
 
 type NewsController struct {
@@ -58,15 +57,15 @@ func (c *NewsController) GetNews(ctx *gin.Context) {
 	filters := c.service.BuildFilters(category, source, searchText, sentiment, startDate, endDate)
 
 	var cursorPublished *time.Time
-	var cursorID *primitive.ObjectID
+	var cursorID *string
 	if cursorParam != "" {
-		ts, oid, err := utils.DecodeNewsCursor(cursorParam)
+		ts, id, err := utils.DecodeNewsCursor(cursorParam)
 		if err != nil {
 			utils.BadRequest(ctx, "Invalid cursor")
 			return
 		}
 		cursorPublished = &ts
-		cursorID = &oid
+		cursorID = &id
 	}
 
 	skip := 0
@@ -93,8 +92,8 @@ func (c *NewsController) GetNews(ctx *gin.Context) {
 	nextCursor := ""
 	if len(articles) == limit {
 		last := articles[len(articles)-1]
-		if last.ID != nil {
-			nextCursor = utils.EncodeNewsCursor(last.PublishedDate, *last.ID)
+		if last.ID != "" {
+			nextCursor = utils.EncodeNewsCursor(last.PublishedDate, last.ID)
 		}
 	}
 

@@ -4,9 +4,12 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"math/big"
+	"net/http"
 	"strings"
 	"time"
 
@@ -374,4 +377,152 @@ func (s *AuthService) ResendVerification(emailAddr string) error {
 	}
 
 	return nil
+}
+
+// ── Google OAuth ─────────────────────────────────────────────────────────────
+
+type googleTokenInfo struct {
+	Sub           string `json:"sub"`            // Google user ID
+	Email         string `json:"email"`
+	EmailVerified string `json:"email_verified"` // "true" | "false"
+	Name          string `json:"name"`
+	Aud           string `json:"aud"`            // must match our client ID
+	Error         string `json:"error"`          // set when token is invalid
+}
+
+func verifyGoogleIDToken(idToken string) (*googleTokenInfo, error) {
+	resp, err := http.Get("https://oauth2.googleapis.com/tokeninfo?id_token=" + idToken)
+	if err != nil {
+		return nil, errors.New("failed to reach Google token verification service")
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, errors.New("failed to read Google token response")
+	}
+
+	var info googleTokenInfo
+	if err := json.Unmarshal(body, &info); err != nil {
+		return nil, errors.New("invalid token response from Google")
+	}
+
+	if info.Error != "" {
+		return nil, errors.New("invalid or expired Google token")
+	}
+
+	return &info, nil
+}
+
+type GoogleLoginRequest struct {
+	IDToken    string `json:"id_token" binding:"required"`
+	InviteCode string `json:"invite_code"`
+}
+
+// GoogleLogin verifies a Google ID token and returns a Stocet JWT.
+// For existing users (by Google ID or email), it logs them in directly.
+// For new users, it requires a valid invite code and creates the account.
+func (s *AuthService) GoogleLogin(req GoogleLoginRequest) (*AuthResponse, error) {
+	if config.AppConfig.GoogleClientID == "" {
+		return nil, errors.New("Google OAuth is not configured on this server")
+	}
+
+	info, err := verifyGoogleIDToken(req.IDToken)
+	if err != nil {
+		return nil, err
+	}
+
+	// Verify audience matches our app
+	if info.Aud != config.AppConfig.GoogleClientID {
+		return nil, errors.New("token audience mismatch")
+	}
+
+	if info.EmailVerified != "true" {
+		return nil, errors.New("Google account email is not verified")
+	}
+
+	email := strings.ToLower(strings.TrimSpace(info.Email))
+	if email == "" {
+		return nil, errors.New("no email returned from Google")
+	}
+
+	// 1. Try to find user by Google ID
+	user, err := s.userRepo.FindByGoogleID(info.Sub)
+	if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, errors.New("database error looking up account")
+	}
+
+	// 2. Try to find user by email (existing email/password user linking their Google account)
+	if user == nil {
+		user, err = s.userRepo.GetByEmail(email)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errors.New("database error looking up account")
+		}
+		if user != nil && user.GoogleID == nil {
+			// Link the Google ID to the existing account
+			googleID := info.Sub
+			user.GoogleID = &googleID
+			_ = s.userRepo.Update(user)
+		}
+	}
+
+	// 3. New user — requires invite code
+	if user == nil {
+		inviteCode := strings.TrimSpace(req.InviteCode)
+		if inviteCode == "" {
+			return nil, errors.New("an invite code is required to create a new account")
+		}
+
+		// Consume validates + atomically increments; rolls back automatically on failure
+		if err := s.inviteCodeRepo.Consume(inviteCode); err != nil {
+			return nil, errors.New("invalid or expired invite code")
+		}
+
+		orgID, _ := s.orgRepo.GetOrgIDByCode(inviteCode)
+
+		googleID := info.Sub
+		fullName := strings.TrimSpace(info.Name)
+		if fullName == "" {
+			fullName = email
+		}
+
+		user = &models.User{
+			Email:        email,
+			FullName:     fullName,
+			IsVerified:   true,
+			PasswordHash: "",
+			AuthProvider: "google",
+			GoogleID:     &googleID,
+		}
+
+		if err := s.userRepo.Create(user); err != nil {
+			_ = s.inviteCodeRepo.Release(inviteCode)
+			return nil, errors.New("failed to create account")
+		}
+
+		if orgID != nil {
+			userUUID, _ := uuid.Parse(user.ID)
+			_ = s.orgRepo.AddMember(*orgID, userUUID, models.OrgRoleMember)
+			_ = s.userRepo.SetOrgID(user.ID, *orgID)
+		}
+	}
+
+	orgID := ""
+	if user.OrgID != nil {
+		orgID = user.OrgID.String()
+	}
+
+	effective, _ := s.subSvc.EffectiveTier(user.ID)
+
+	token, err := utils.GenerateToken(user.ID, user.Email, string(user.Role), effective, orgID)
+	if err != nil {
+		return nil, errors.New("failed to generate session token")
+	}
+
+	profile, err := s.subSvc.BuildUserProfile(user)
+	if err != nil {
+		return nil, errors.New("failed to build user profile")
+	}
+
+	return &AuthResponse{Token: token, User: profile}, nil
 }

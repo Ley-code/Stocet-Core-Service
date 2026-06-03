@@ -70,3 +70,13 @@ func (r *UserRepository) SetOrgID(userID string, orgID uuid.UUID) error {
 		Where("id = ?", userID).
 		Update("org_id", orgID).Error
 }
+
+// FindByGoogleID looks up a user by their Google sub claim.
+func (r *UserRepository) FindByGoogleID(googleID string) (*models.User, error) {
+	var user models.User
+	err := database.DB.Where("google_id = ?", googleID).First(&user).Error
+	if err != nil {
+		return nil, err
+	}
+	return &user, nil
+}

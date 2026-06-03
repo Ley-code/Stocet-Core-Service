@@ -10,10 +10,10 @@ import (
 const maxArticleCommentLength = 2000
 
 type ArticleInteractionsService struct {
-	repo *repositories.ArticleInteractionsRepository
+	repo *repositories.PostgresArticleInteractionsRepository
 }
 
-func NewArticleInteractionsService(repo *repositories.ArticleInteractionsRepository) *ArticleInteractionsService {
+func NewArticleInteractionsService(repo *repositories.PostgresArticleInteractionsRepository) *ArticleInteractionsService {
 	return &ArticleInteractionsService{repo: repo}
 }
 

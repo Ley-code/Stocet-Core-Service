@@ -13,7 +13,7 @@ import (
 
 // SentimentResult holds the Gemini classification for one news article.
 type SentimentResult struct {
-	Sentiment  string   `json:"sentiment"`   // "bullish" | "bearish" | "neutral"
+	Sentiment  string   `json:"sentiment"` // "bullish" | "bearish" | "neutral"
 	Tickers    []string `json:"tickers"`
 	Confidence float64  `json:"confidence"`
 }
@@ -87,8 +87,7 @@ Rules:
 
 // RunSentimentBackfillOnce fetches one batch of unanalyzed articles and
 // classifies them. Returns the number of articles successfully processed.
-// Safe to call concurrently — MongoDB UpdateOne is atomic per document.
-func RunSentimentBackfillOnce(ctx context.Context, client *GeminiClient, repo *repositories.NewsRepository, batchSize int) (int, error) {
+func RunSentimentBackfillOnce(ctx context.Context, client *GeminiClient, repo repositories.SentimentBackfillRepository, batchSize int) (int, error) {
 	if !client.Configured() {
 		return 0, nil
 	}
@@ -103,26 +102,26 @@ func RunSentimentBackfillOnce(ctx context.Context, client *GeminiClient, repo *r
 
 	processed := 0
 	for _, article := range articles {
-		if article.ID == nil {
+		if article.ID == "" {
 			continue
 		}
 
 		result, err := ClassifyNewsSentiment(ctx, client, article.Title, article.Summary)
 		if err != nil {
 			log.Printf("[sentiment] skipping article %v: %v", article.ID, err)
-			// Mark as neutral so we don't retry indefinitely on this article
-			_ = repo.UpdateSentiment(ctx, *article.ID, "neutral", []string{})
+			if updateErr := repo.UpdateSentiment(ctx, article.ID, "neutral", []string{}); updateErr != nil {
+				log.Printf("[sentiment] update failed for %v: %v", article.ID, updateErr)
+			}
 			continue
 		}
 
-		if err := repo.UpdateSentiment(ctx, *article.ID, result.Sentiment, result.Tickers); err != nil {
+		if err := repo.UpdateSentiment(ctx, article.ID, result.Sentiment, result.Tickers); err != nil {
 			log.Printf("[sentiment] update failed for %v: %v", article.ID, err)
 			continue
 		}
 
 		processed++
 
-		// Pace requests to stay under Gemini rate limits
 		select {
 		case <-ctx.Done():
 			return processed, ctx.Err()
@@ -139,7 +138,7 @@ func RunSentimentBackfillOnce(ctx context.Context, client *GeminiClient, repo *r
 
 // StartSentimentWorker runs a periodic sentiment backfill — call from main()
 // outside of Lambda. Runs once immediately then on every interval.
-func StartSentimentWorker(ctx context.Context, client *GeminiClient, repo *repositories.NewsRepository, interval time.Duration, batchSize int) {
+func StartSentimentWorker(ctx context.Context, client *GeminiClient, repo repositories.SentimentBackfillRepository, interval time.Duration, batchSize int) {
 	if !client.Configured() {
 		log.Println("[sentiment] worker skipped (gemini not configured)")
 		return
