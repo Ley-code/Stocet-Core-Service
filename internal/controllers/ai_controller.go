@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"stocet-core-service/internal/config"
+	"stocet-core-service/internal/repositories"
 	"stocet-core-service/internal/services"
 	"stocet-core-service/internal/utils"
 
@@ -24,26 +25,43 @@ import (
 type AIController struct {
 	svc      *services.AIService
 	quotaSvc *services.AIQuotaService
+	userRepo *repositories.UserRepository
 }
 
 // NewAIController is the canonical constructor used in main.go.
-func NewAIController(svc *services.AIService, quotaSvc *services.AIQuotaService) *AIController {
-	return &AIController{svc: svc, quotaSvc: quotaSvc}
+func NewAIController(svc *services.AIService, quotaSvc *services.AIQuotaService, userRepo *repositories.UserRepository) *AIController {
+	return &AIController{svc: svc, quotaSvc: quotaSvc, userRepo: userRepo}
 }
 
 func (c *AIController) isAdmin(ctx *gin.Context) bool {
-	role, _ := ctx.Get("user_role")
-	return role == config.ADMIN_ROLE
+	if c.userRepo == nil {
+		role, _ := ctx.Get("user_role")
+		roleStr, _ := role.(string)
+		return roleStr == config.ADMIN_ROLE
+	}
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		return false
+	}
+	user, err := c.userRepo.GetByID(userID)
+	if err != nil {
+		return false
+	}
+	return user.Role == config.ADMIN_ROLE
 }
 
 func (c *AIController) enforceQuota(ctx *gin.Context) bool {
 	if c.quotaSvc == nil {
 		return true
 	}
-	userID, _ := ctx.Get("user_id")
-	if err := c.quotaSvc.CheckAndIncrement(userID.(string), c.isAdmin(ctx)); err != nil {
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return false
+	}
+	if err := c.quotaSvc.CheckAndIncrement(userID, c.isAdmin(ctx)); err != nil {
 		if errors.Is(err, services.ErrAIQuotaExceeded) {
-			used, limit, _ := c.quotaSvc.GetUsage(userID.(string), false)
+			used, limit, _ := c.quotaSvc.GetUsage(userID, false)
 			ctx.JSON(http.StatusTooManyRequests, gin.H{
 				"success": false,
 				"error":   "ai_quota_exceeded",
@@ -65,8 +83,12 @@ func (c *AIController) Usage(ctx *gin.Context) {
 		utils.SuccessResponse(ctx, http.StatusOK, gin.H{"used": 0, "limit": 0}, "")
 		return
 	}
-	userID, _ := ctx.Get("user_id")
-	used, limit, err := c.quotaSvc.GetUsage(userID.(string), c.isAdmin(ctx))
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
+	used, limit, err := c.quotaSvc.GetUsage(userID, c.isAdmin(ctx))
 	if err != nil {
 		utils.InternalServerError(ctx, err, "Failed to fetch AI usage")
 		return

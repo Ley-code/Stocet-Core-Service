@@ -11,11 +11,15 @@ import (
 )
 
 type NewsController struct {
-	service *services.NewsService
+	service             *services.NewsService
+	interactionsService *services.ArticleInteractionsService
 }
 
-func NewNewsController(service *services.NewsService) *NewsController {
-	return &NewsController{service: service}
+func NewNewsController(service *services.NewsService, interactionsService *services.ArticleInteractionsService) *NewsController {
+	return &NewsController{
+		service:             service,
+		interactionsService: interactionsService,
+	}
 }
 
 func parseNewsLimit(c *gin.Context, defaultLimit, maxLimit int) int {
@@ -81,6 +85,32 @@ func (c *NewsController) GetNews(ctx *gin.Context) {
 	if err != nil {
 		utils.InternalServerError(ctx, err, "Failed to fetch news")
 		return
+	}
+
+	if len(articles) > 0 && c.interactionsService != nil {
+		articleIDs := make([]string, 0, len(articles))
+		for _, article := range articles {
+			if article.ID != "" {
+				articleIDs = append(articleIDs, article.ID)
+			}
+		}
+
+		userID := ""
+		if uid, ok := ctx.Get("user_id"); ok {
+			if uidStr, ok := uid.(string); ok {
+				userID = uidStr
+			}
+		}
+
+		likeCounts, likeErr := c.interactionsService.GetLikeCounts(articleIDs, userID)
+		if likeErr == nil {
+			for i := range articles {
+				if summary, ok := likeCounts[articles[i].ID]; ok {
+					articles[i].LikeCount = summary.Count
+					articles[i].Liked = summary.Liked
+				}
+			}
+		}
 	}
 
 	total, err := c.service.CountNews(filters)

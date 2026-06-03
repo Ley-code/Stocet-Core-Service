@@ -21,9 +21,20 @@ func (r *AlertsRepository) GetByID(id string) (*models.Alert, error) {
 	return &alert, nil
 }
 
-func (r *AlertsRepository) GetByUserID(userID string) ([]models.Alert, error) {
+const DefaultAlertsListLimit = 200
+
+func (r *AlertsRepository) GetByUserID(userID string, limit int) ([]models.Alert, error) {
+	q := database.DB.Where("user_id = ?", userID).Order("created_at DESC")
+	switch {
+	case limit < 0:
+		// no limit (e.g. CSV export)
+	case limit == 0:
+		q = q.Limit(DefaultAlertsListLimit)
+	default:
+		q = q.Limit(limit)
+	}
 	var alerts []models.Alert
-	err := database.DB.Where("user_id = ?", userID).Order("created_at DESC").Find(&alerts).Error
+	err := q.Find(&alerts).Error
 	return alerts, err
 }
 
@@ -36,6 +47,8 @@ func (r *AlertsRepository) CountActiveByUserID(userID string) (int64, error) {
 	return count, err
 }
 
+// GetActiveAlerts returns all active alerts (used by background alert matching jobs).
+// Unbounded by design; callers that need user-scoped lists should use GetByUserID.
 func (r *AlertsRepository) GetActiveAlerts() ([]models.Alert, error) {
 	var alerts []models.Alert
 	err := database.DB.Where("status = ?", "active").Find(&alerts).Error

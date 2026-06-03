@@ -22,8 +22,12 @@ func NewPortfolioController(svc *services.PortfolioService) *PortfolioController
 }
 
 func (c *PortfolioController) List(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
-	portfolio, err := c.svc.GetPortfolio(userID.(string))
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
+	portfolio, err := c.svc.GetPortfolio(userID)
 	if err != nil {
 		utils.InternalServerError(ctx, err, "Failed to fetch portfolio")
 		return
@@ -32,13 +36,17 @@ func (c *PortfolioController) List(ctx *gin.Context) {
 }
 
 func (c *PortfolioController) Create(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 	var req services.CreateHoldingRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		utils.BadRequest(ctx, "Invalid request body")
 		return
 	}
-	h, err := c.svc.Create(userID.(string), req)
+	h, err := c.svc.Create(userID, req)
 	if err != nil {
 		utils.BadRequest(ctx, err.Error())
 		return
@@ -47,13 +55,17 @@ func (c *PortfolioController) Create(ctx *gin.Context) {
 }
 
 func (c *PortfolioController) Update(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 	var req services.UpdateHoldingRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
 		utils.BadRequest(ctx, "Invalid request body")
 		return
 	}
-	h, err := c.svc.Update(userID.(string), ctx.Param("id"), req)
+	h, err := c.svc.Update(userID, ctx.Param("id"), req)
 	if err != nil {
 		if errors.Is(err, repositories.ErrHoldingNotFound) {
 			utils.NotFound(ctx, "Holding not found")
@@ -66,8 +78,12 @@ func (c *PortfolioController) Update(ctx *gin.Context) {
 }
 
 func (c *PortfolioController) Delete(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
-	if err := c.svc.Delete(userID.(string), ctx.Param("id")); err != nil {
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
+	if err := c.svc.Delete(userID, ctx.Param("id")); err != nil {
 		if errors.Is(err, repositories.ErrHoldingNotFound) {
 			utils.NotFound(ctx, "Holding not found")
 			return
@@ -81,8 +97,12 @@ func (c *PortfolioController) Delete(ctx *gin.Context) {
 // Export godoc — GET /portfolio/export
 // Streams a CSV of all holdings with live prices. Premium-gated via route middleware.
 func (c *PortfolioController) Export(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
-	portfolio, err := c.svc.GetPortfolio(userID.(string))
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
+	portfolio, err := c.svc.GetPortfolio(userID)
 	if err != nil {
 		utils.InternalServerError(ctx, err, "Failed to fetch portfolio")
 		return

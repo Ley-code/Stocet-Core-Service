@@ -27,6 +27,8 @@ type NewsArticle struct {
 	Sentiment           string     `json:"sentiment,omitempty"`
 	SentimentTickers    []string   `json:"sentiment_tickers,omitempty"`
 	SentimentAnalyzedAt *time.Time `json:"sentiment_analyzed_at,omitempty"`
+	LikeCount           int64      `json:"like_count,omitempty"`
+	Liked               bool       `json:"liked,omitempty"`
 }
 
 type PostgresNewsRepository struct {

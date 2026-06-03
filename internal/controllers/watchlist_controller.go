@@ -16,9 +16,13 @@ func NewWatchlistController(service *services.WatchlistService) *WatchlistContro
 }
 
 func (c *WatchlistController) List(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 
-	items, err := c.service.GetByUserID(userID.(string))
+	items, err := c.service.GetByUserID(userID)
 	if err != nil {
 		utils.InternalServerError(ctx, err, "Failed to fetch watchlist")
 		return
@@ -32,7 +36,11 @@ type addWatchlistRequest struct {
 }
 
 func (c *WatchlistController) Add(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 
 	var req addWatchlistRequest
 	if err := ctx.ShouldBindJSON(&req); err != nil {
@@ -40,7 +48,7 @@ func (c *WatchlistController) Add(ctx *gin.Context) {
 		return
 	}
 
-	item, err := c.service.Add(userID.(string), req.Ticker)
+	item, err := c.service.Add(userID, req.Ticker)
 	if err != nil {
 		utils.BadRequest(ctx, err.Error())
 		return
@@ -50,10 +58,14 @@ func (c *WatchlistController) Add(ctx *gin.Context) {
 }
 
 func (c *WatchlistController) Remove(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 	id := ctx.Param("id")
 
-	if err := c.service.Remove(id, userID.(string)); err != nil {
+	if err := c.service.Remove(id, userID); err != nil {
 		utils.InternalServerError(ctx, err, "Failed to remove from watchlist")
 		return
 	}

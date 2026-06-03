@@ -3,6 +3,8 @@ package repositories
 import (
 	"stocet-core-service/internal/database"
 	"stocet-core-service/internal/models"
+
+	"gorm.io/gorm"
 )
 
 type EducationRepository struct{}
@@ -33,7 +35,9 @@ func (r *EducationRepository) ListCourses(limit, offset int) ([]models.Course, i
 		return nil, 0, err
 	}
 
-	err := database.DB.Preload("Lessons.Quiz.Questions").Limit(limit).Offset(offset).Find(&courses).Error
+	err := database.DB.Preload("Lessons", func(db *gorm.DB) *gorm.DB {
+		return db.Select("id", "course_id", "title", "order", "video_url", "created_at", "updated_at")
+	}).Limit(limit).Offset(offset).Find(&courses).Error
 	return courses, total, err
 }
 

@@ -45,7 +45,11 @@ func (c *ChatController) GetMessages(ctx *gin.Context) {
 }
 
 func (c *ChatController) SendMessage(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 	channelID := ctx.Param("id")
 
 	var req struct {
@@ -58,7 +62,7 @@ func (c *ChatController) SendMessage(ctx *gin.Context) {
 		return
 	}
 
-	message, err := c.service.CreateMessage(channelID, userID.(string), req.Content, req.ParentID)
+	message, err := c.service.CreateMessage(channelID, userID, req.Content, req.ParentID)
 	if err != nil {
 		utils.BadRequest(ctx, err.Error())
 		return
@@ -68,7 +72,11 @@ func (c *ChatController) SendMessage(ctx *gin.Context) {
 }
 
 func (c *ChatController) EditMessage(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 	messageID := ctx.Param("id")
 
 	var req struct {
@@ -80,7 +88,7 @@ func (c *ChatController) EditMessage(ctx *gin.Context) {
 		return
 	}
 
-	message, err := c.service.EditMessage(messageID, userID.(string), req.Content)
+	message, err := c.service.EditMessage(messageID, userID, req.Content)
 	if err != nil {
 		if err.Error() == "forbidden" {
 			utils.Forbidden(ctx, "You can only edit your own messages")
@@ -94,10 +102,14 @@ func (c *ChatController) EditMessage(ctx *gin.Context) {
 }
 
 func (c *ChatController) DeleteMessage(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 	messageID := ctx.Param("id")
 
-	err := c.service.DeleteMessage(messageID, userID.(string))
+	err := c.service.DeleteMessage(messageID, userID)
 	if err != nil {
 		if err.Error() == "forbidden" {
 			utils.Forbidden(ctx, "You can only delete your own messages")

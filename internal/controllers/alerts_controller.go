@@ -24,8 +24,12 @@ func NewAlertsController(service *services.AlertsService) *AlertsController {
 }
 
 func (c *AlertsController) List(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
-	alerts, err := c.service.GetByUserID(userID.(string))
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
+	alerts, err := c.service.GetByUserID(userID, 0)
 	if err != nil {
 		utils.InternalServerError(ctx, err, "Failed to fetch alerts")
 		return
@@ -34,7 +38,11 @@ func (c *AlertsController) List(ctx *gin.Context) {
 }
 
 func (c *AlertsController) Create(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 
 	var alert models.Alert
 	if err := ctx.ShouldBindJSON(&alert); err != nil {
@@ -42,7 +50,7 @@ func (c *AlertsController) Create(ctx *gin.Context) {
 		return
 	}
 
-	userUUID, err := uuid.Parse(userID.(string))
+	userUUID, err := uuid.Parse(userID)
 	if err != nil {
 		utils.BadRequest(ctx, "Invalid user ID format")
 		return
@@ -67,14 +75,18 @@ func (c *AlertsController) Create(ctx *gin.Context) {
 
 func (c *AlertsController) Update(ctx *gin.Context) {
 	id := ctx.Param("id")
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 
 	existing, err := c.service.GetByID(id)
 	if err != nil {
 		utils.NotFound(ctx, "Alert not found")
 		return
 	}
-	if existing.UserID.String() != userID.(string) {
+	if existing.UserID.String() != userID {
 		utils.Forbidden(ctx, "You can only update your own alerts")
 		return
 	}
@@ -84,7 +96,7 @@ func (c *AlertsController) Update(ctx *gin.Context) {
 		utils.BadRequest(ctx, "Invalid request body")
 		return
 	}
-	userUUID, err := uuid.Parse(userID.(string))
+	userUUID, err := uuid.Parse(userID)
 	if err != nil {
 		utils.BadRequest(ctx, "Invalid user ID format")
 		return
@@ -101,14 +113,18 @@ func (c *AlertsController) Update(ctx *gin.Context) {
 
 func (c *AlertsController) Delete(ctx *gin.Context) {
 	id := ctx.Param("id")
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 
 	existing, err := c.service.GetByID(id)
 	if err != nil {
 		utils.NotFound(ctx, "Alert not found")
 		return
 	}
-	if existing.UserID.String() != userID.(string) {
+	if existing.UserID.String() != userID {
 		utils.Forbidden(ctx, "You can only delete your own alerts")
 		return
 	}
@@ -122,21 +138,25 @@ func (c *AlertsController) Delete(ctx *gin.Context) {
 // Toggle flips an alert between active and disabled.
 func (c *AlertsController) Toggle(ctx *gin.Context) {
 	id := ctx.Param("id")
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 
 	existing, err := c.service.GetByID(id)
 	if err != nil {
 		utils.NotFound(ctx, "Alert not found")
 		return
 	}
-	if existing.UserID.String() != userID.(string) {
+	if existing.UserID.String() != userID {
 		utils.Forbidden(ctx, "You can only update your own alerts")
 		return
 	}
 
 	role, _ := ctx.Get("user_role")
 	roleStr, _ := role.(string)
-	newStatus, err := c.service.Toggle(id, userID.(string), services.IsAdminRole(roleStr))
+	newStatus, err := c.service.Toggle(id, userID, services.IsAdminRole(roleStr))
 	if err != nil {
 		if errors.Is(err, services.ErrAlertLimitReached) {
 			ctx.JSON(http.StatusPaymentRequired, gin.H{
@@ -155,8 +175,12 @@ func (c *AlertsController) Toggle(ctx *gin.Context) {
 // Export godoc — GET /alerts/export
 // Streams a CSV of all alerts for the authenticated user.
 func (c *AlertsController) Export(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
-	alerts, err := c.service.GetByUserID(userID.(string))
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
+	alerts, err := c.service.GetByUserID(userID, -1)
 	if err != nil {
 		utils.InternalServerError(ctx, err, "Failed to fetch alerts")
 		return
@@ -194,14 +218,18 @@ func (c *AlertsController) Export(ctx *gin.Context) {
 // GetHistory returns the trigger history for one alert.
 func (c *AlertsController) GetHistory(ctx *gin.Context) {
 	id := ctx.Param("id")
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 
 	existing, err := c.service.GetByID(id)
 	if err != nil {
 		utils.NotFound(ctx, "Alert not found")
 		return
 	}
-	if existing.UserID.String() != userID.(string) {
+	if existing.UserID.String() != userID {
 		utils.Forbidden(ctx, "Not your alert")
 		return
 	}

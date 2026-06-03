@@ -2,8 +2,11 @@ package utils
 
 import (
 	"fmt"
+	"log"
 	"net/http"
 	"time"
+
+	"stocet-core-service/internal/config"
 
 	"github.com/gin-gonic/gin"
 )
@@ -29,13 +32,28 @@ func SuccessResponse(c *gin.Context, statusCode int, data interface{}, message s
 func ErrorResponse(c *gin.Context, statusCode int, err error, message string) {
 	var errString string
 	if err != nil {
-		errString = err.Error()
+		if config.AppConfig != nil && config.AppConfig.Environment == "production" {
+			log.Printf("[error] status=%d message=%q err=%v", statusCode, message, err)
+			errString = "internal_error"
+		} else {
+			errString = err.Error()
+		}
 	}
 	c.JSON(statusCode, APIResponse{
 		Success: false,
 		Error:   errString,
 		Message: message,
 	})
+}
+
+// GetUserID returns the authenticated user ID from Gin context.
+func GetUserID(c *gin.Context) (string, bool) {
+	userID, exists := c.Get("user_id")
+	if !exists {
+		return "", false
+	}
+	uid, ok := userID.(string)
+	return uid, ok
 }
 
 // BadRequest sends a 400 Bad Request response

@@ -55,7 +55,11 @@ func NewGeminiClient(apiKey, chatModel, embedModel string, timeout time.Duration
 		embedModel = "gemini-embedding-001"
 	}
 	if timeout <= 0 {
-		timeout = 25 * time.Second
+		timeout = 60 * time.Second
+	}
+	const minClientTimeout = 60 * time.Second
+	if timeout < minClientTimeout {
+		timeout = minClientTimeout
 	}
 	return &GeminiClient{
 		apiKey:     apiKey,
@@ -115,7 +119,7 @@ func (c *GeminiClient) Embed(ctx context.Context, text string, taskType string) 
 		OutputDimensionality: EmbeddingDimensions,
 		TaskType:             strings.TrimSpace(taskType),
 	}
-	url := fmt.Sprintf("%s/models/%s:embedContent?key=%s", geminiBaseURL, c.embedModel, c.apiKey)
+	url := fmt.Sprintf("%s/models/%s:embedContent", geminiBaseURL, c.embedModel)
 
 	var out embedResponse
 	if err := c.doJSON(ctx, http.MethodPost, url, body, &out, "embedContent"); err != nil {
@@ -281,7 +285,7 @@ func (c *GeminiClient) GenerateContent(ctx context.Context, req GeminiRequest) (
 	if !c.Configured() {
 		return nil, ErrGeminiUnavailable
 	}
-	url := fmt.Sprintf("%s/models/%s:generateContent?key=%s", geminiBaseURL, c.chatModel, c.apiKey)
+	url := fmt.Sprintf("%s/models/%s:generateContent", geminiBaseURL, c.chatModel)
 	var out GeminiResponse
 	if err := c.doJSON(ctx, http.MethodPost, url, req, &out, "generateContent"); err != nil {
 		return nil, err
@@ -351,6 +355,7 @@ func (c *GeminiClient) doOnce(ctx context.Context, method, rawURL string, body a
 	}
 	req.Header.Set("Content-Type", "application/json")
 	req.Header.Set("Accept", "application/json")
+	req.Header.Set("x-goog-api-key", c.apiKey)
 
 	resp, err := c.http.Do(req)
 	if err != nil {

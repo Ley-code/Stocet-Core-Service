@@ -14,6 +14,7 @@ require (
 	github.com/xuri/excelize/v2 v2.10.1
 	golang.org/x/crypto v0.48.0
 	golang.org/x/oauth2 v0.36.0
+	golang.org/x/time v0.5.0
 	gorm.io/datatypes v1.2.7
 	gorm.io/driver/postgres v1.5.4
 	gorm.io/gorm v1.30.0

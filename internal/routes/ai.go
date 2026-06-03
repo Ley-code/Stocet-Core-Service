@@ -21,7 +21,7 @@ func SetupAIRoutes(router *gin.RouterGroup, controller *controllers.AIController
 	}
 	{
 		ai.GET("/usage", controller.Usage)
-		ai.POST("/chat", controller.Chat)
-		ai.POST("/chat/stream", controller.ChatStream)
+		ai.POST("/chat", middleware.RateLimitByIP(20, 20), controller.Chat)
+		ai.POST("/chat/stream", middleware.RateLimitByIP(20, 20), controller.ChatStream)
 	}
 }

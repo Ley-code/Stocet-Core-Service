@@ -13,7 +13,7 @@ func SetupNotificationsRoutes(
 	prefController *controllers.NotificationPreferenceController,
 ) {
 	// Internal endpoint — called by the News Aggregation Service.
-	router.POST("/internal/trigger-alerts", controller.HandleTriggerAlerts)
+	router.POST("/internal/trigger-alerts", middleware.InternalSecretMiddleware(), controller.HandleTriggerAlerts)
 
 	// User-facing notification endpoints (require authentication).
 	notifications := router.Group("/notifications", middleware.AuthMiddleware())

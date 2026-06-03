@@ -24,8 +24,12 @@ func NewAdvisoryController(repo *repositories.AdvisoryReportRepository) *Advisor
 
 // List godoc — GET /advisory/reports
 func (c *AdvisoryController) List(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
-	reports, err := c.repo.ListByUser(userID.(string))
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
+	reports, err := c.repo.ListByUser(userID)
 	if err != nil {
 		utils.InternalServerError(ctx, err, "Failed to fetch advisory reports")
 		return
@@ -36,7 +40,11 @@ func (c *AdvisoryController) List(ctx *gin.Context) {
 // Create godoc — POST /advisory/reports
 // Body: { title: string, profile: object, result: string }
 func (c *AdvisoryController) Create(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 
 	var body struct {
 		Title   string                 `json:"title"`
@@ -54,7 +62,7 @@ func (c *AdvisoryController) Create(ctx *gin.Context) {
 
 	profileBytes, _ := json.Marshal(body.Profile)
 
-	uid, err := uuid.Parse(userID.(string))
+	uid, err := uuid.Parse(userID)
 	if err != nil {
 		utils.BadRequest(ctx, "invalid user id")
 		return
@@ -76,8 +84,12 @@ func (c *AdvisoryController) Create(ctx *gin.Context) {
 
 // Delete godoc — DELETE /advisory/reports/:id
 func (c *AdvisoryController) Delete(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
-	if err := c.repo.Delete(userID.(string), ctx.Param("id")); err != nil {
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
+	if err := c.repo.Delete(userID, ctx.Param("id")); err != nil {
 		if errors.Is(err, repositories.ErrAdvisoryReportNotFound) {
 			utils.NotFound(ctx, "Report not found")
 			return

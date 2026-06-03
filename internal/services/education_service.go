@@ -94,10 +94,23 @@ func (s *EducationService) SubmitQuiz(userID, lessonID string, answers []int) (*
 		return nil, errors.New("failed to marshal answers")
 	}
 
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, errors.New("invalid user ID")
+	}
+	lessonUUID, err := uuid.Parse(lessonID)
+	if err != nil {
+		return nil, errors.New("invalid lesson ID")
+	}
+	quizUUID, err := uuid.Parse(quiz.ID)
+	if err != nil {
+		return nil, errors.New("invalid quiz ID")
+	}
+
 	submission := &models.QuizSubmission{
-		UserID:   uuid.MustParse(userID),
-		LessonID: uuid.MustParse(lessonID),
-		QuizID:   uuid.MustParse(quiz.ID),
+		UserID:   userUUID,
+		LessonID: lessonUUID,
+		QuizID:   quizUUID,
 		Answers:  datatypes.JSON(answersBytes),
 		Score:    score,
 	}

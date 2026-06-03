@@ -1,8 +1,12 @@
 package services
 
 import (
+	"context"
+
 	"stocet-core-service/internal/models"
 	"stocet-core-service/internal/repositories"
+
+	"golang.org/x/sync/errgroup"
 )
 
 type DashboardService struct {
@@ -49,29 +53,45 @@ type AlertsSummary struct {
 }
 
 func (s *DashboardService) GetDashboardData(userID string) (*DashboardData, error) {
-	// Get market data
-	prices, err := s.marketDataService.GetLatestAll()
-	if err != nil {
+	var (
+		prices     []models.MarketPrice
+		recentNews []repositories.NewsArticle
+		userAlerts []models.Alert
+	)
+
+	g, _ := errgroup.WithContext(context.Background())
+
+	g.Go(func() error {
+		var err error
+		prices, err = s.marketDataService.GetLatestAll()
+		return err
+	})
+
+	g.Go(func() error {
+		newsFilters := map[string]interface{}{}
+		var err error
+		recentNews, err = s.newsService.GetNews(newsFilters, 5, 0, nil, nil)
+		if err != nil {
+			recentNews = []repositories.NewsArticle{}
+		}
+		return nil
+	})
+
+	g.Go(func() error {
+		var err error
+		userAlerts, err = s.alertsService.GetByUserID(userID, repositories.DefaultAlertsListLimit)
+		if err != nil {
+			userAlerts = []models.Alert{}
+		}
+		return nil
+	})
+
+	if err := g.Wait(); err != nil {
 		return nil, err
 	}
 
-	// Build market summary
 	marketSummary := s.buildMarketSummary(prices)
 	topGainers, topLosers := s.getTopMovers(prices)
-
-	// Get recent news
-	newsFilters := map[string]interface{}{}
-	recentNews, err := s.newsService.GetNews(newsFilters, 5, 0, nil, nil)
-	if err != nil {
-		recentNews = []repositories.NewsArticle{}
-	}
-
-	// Get user alerts
-	userAlerts, err := s.alertsService.GetByUserID(userID)
-	if err != nil {
-		userAlerts = []models.Alert{}
-	}
-
 	alertsSummary := s.buildAlertsSummary(userAlerts)
 
 	if recentNews == nil {

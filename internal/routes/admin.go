@@ -29,6 +29,8 @@ func SetupAdminRoutes(
 		// Users
 		admin.GET("/users", adminController.ListUsers)
 		admin.PUT("/users/:id", adminController.UpdateUser)
+		admin.PUT("/users/:id/role", adminController.UpdateUserRole)
+		admin.PUT("/users/:id/subscription", adminController.UpdateUserSubscription)
 		admin.DELETE("/users/:id", adminController.DeleteUser)
 
 		// Invite codes

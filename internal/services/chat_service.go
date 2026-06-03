@@ -37,9 +37,14 @@ func (s *ChatService) CreateMessage(channelID, userID, content string, parentID 
 		return nil, errors.New("message too long")
 	}
 
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, errors.New("invalid user ID")
+	}
+
 	message := &models.Message{
 		ChannelID: channelID,
-		UserID:    uuid.MustParse(userID),
+		UserID:    userUUID,
 		Content:   content,
 		ParentID:  parentID,
 	}

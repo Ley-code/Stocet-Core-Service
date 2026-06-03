@@ -139,7 +139,26 @@ WHERE 1=1`
 		args = append(args, *maxChg)
 	}
 
+	limit := 50
+	if l := ctx.Query("limit"); l != "" {
+		if v, err := strconv.Atoi(l); err == nil && v > 0 {
+			limit = v
+		}
+	}
+	if limit > 500 {
+		limit = 500
+	}
+
+	skip := 0
+	if s := ctx.Query("skip"); s != "" {
+		if v, err := strconv.Atoi(s); err == nil && v >= 0 {
+			skip = v
+		}
+	}
+
 	base += fmt.Sprintf(" ORDER BY %s %s NULLS LAST", sortCol, sortDir)
+	base += fmt.Sprintf(" LIMIT %s OFFSET %s", ph(), ph())
+	args = append(args, limit, skip)
 
 	rows, err := database.DB.Raw(base, args...).Rows()
 	if err != nil {

@@ -58,6 +58,13 @@ type Config struct {
 
 	// Google OAuth
 	GoogleClientID string
+
+	// Internal service-to-service auth
+	InternalSecret string
+
+	// Admin seeding
+	EnableAdminSeed      bool
+	AdminInitialPassword string
 }
 
 var AppConfig *Config
@@ -97,7 +104,7 @@ func LoadConfig() error {
 		GeminiEmbedModel:      getEnv("GEMINI_EMBED_MODEL", "gemini-embedding-001"),
 		AIChatHistoryMaxTurns: getEnvInt("AI_CHAT_MAX_TURNS", 12),
 		AIChatHistoryMaxChars: getEnvInt("AI_CHAT_MAX_CHARS", 16000),
-		AIRequestTimeoutSec:   getEnvInt("AI_REQUEST_TIMEOUT_SEC", 25),
+		AIRequestTimeoutSec:   getEnvInt("AI_REQUEST_TIMEOUT_SEC", 60),
 		AIBackfillIntervalSec: getEnvInt("AI_BACKFILL_INTERVAL_SEC", 300),
 		AIBackfillBatchSize:   getEnvInt("AI_BACKFILL_BATCH_SIZE", 25),
 
@@ -105,10 +112,18 @@ func LoadConfig() error {
 		FCMServiceAccountJSON: getEnv("FCM_SERVICE_ACCOUNT_JSON", ""),
 
 		GoogleClientID: getEnv("GOOGLE_CLIENT_ID", ""),
+
+		InternalSecret:       getEnv("INTERNAL_SECRET", ""),
+		EnableAdminSeed:      getEnv("ENABLE_ADMIN_SEED", "") == "true",
+		AdminInitialPassword: getEnv("ADMIN_INITIAL_PASSWORD", ""),
 	}
 
 	if AppConfig.JWTSecret == "change-me-in-production" && AppConfig.Environment == "production" {
 		log.Fatal("JWT_SECRET must be set in production")
+	}
+
+	if AppConfig.PostgresPassword == "postgres" && AppConfig.Environment == "production" {
+		log.Fatal("POSTGRES_PASSWORD must be set in production")
 	}
 
 	return nil

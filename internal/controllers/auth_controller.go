@@ -110,9 +110,13 @@ func (c *AuthController) ResendVerification(ctx *gin.Context) {
 
 // GetMe returns the currently authenticated user's profile
 func (c *AuthController) GetMe(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 
-	user, err := c.userRepo.GetByID(userID.(string))
+	user, err := c.userRepo.GetByID(userID)
 	if err != nil {
 		utils.NotFound(ctx, "User not found")
 		return
@@ -129,9 +133,13 @@ func (c *AuthController) GetMe(ctx *gin.Context) {
 
 // DeleteAccount permanently deletes the authenticated user's account
 func (c *AuthController) DeleteAccount(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 
-	if err := c.userRepo.Delete(userID.(string)); err != nil {
+	if err := c.userRepo.Delete(userID); err != nil {
 		utils.InternalServerError(ctx, err, "Failed to delete account")
 		return
 	}
@@ -141,9 +149,13 @@ func (c *AuthController) DeleteAccount(ctx *gin.Context) {
 
 // MarkTourSeen marks the onboarding tour as seen for the authenticated user
 func (c *AuthController) MarkTourSeen(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 
-	if err := c.userRepo.UpdateFields(userID.(string), map[string]interface{}{
+	if err := c.userRepo.UpdateFields(userID, map[string]interface{}{
 		"has_seen_tour": true,
 	}); err != nil {
 		utils.InternalServerError(ctx, err, "Failed to update tour status")
@@ -155,7 +167,11 @@ func (c *AuthController) MarkTourSeen(ctx *gin.Context) {
 
 // UpdateProfile updates the authenticated user's display name
 func (c *AuthController) UpdateProfile(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 
 	var req struct {
 		FullName string `json:"full_name" binding:"required"`
@@ -171,7 +187,7 @@ func (c *AuthController) UpdateProfile(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.userRepo.UpdateFields(userID.(string), map[string]interface{}{
+	if err := c.userRepo.UpdateFields(userID, map[string]interface{}{
 		"full_name": name,
 	}); err != nil {
 		utils.InternalServerError(ctx, err, "Failed to update profile")
@@ -183,7 +199,11 @@ func (c *AuthController) UpdateProfile(ctx *gin.Context) {
 
 // ChangePassword updates the authenticated user's password
 func (c *AuthController) ChangePassword(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 
 	var req struct {
 		CurrentPassword string `json:"current_password" binding:"required"`
@@ -195,7 +215,7 @@ func (c *AuthController) ChangePassword(ctx *gin.Context) {
 	}
 
 	// Get user to verify current password
-	user, err := c.userRepo.GetByID(userID.(string))
+	user, err := c.userRepo.GetByID(userID)
 	if err != nil {
 		utils.NotFound(ctx, "User not found")
 		return
@@ -217,7 +237,7 @@ func (c *AuthController) ChangePassword(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.userRepo.UpdateFields(userID.(string), map[string]interface{}{
+	if err := c.userRepo.UpdateFields(userID, map[string]interface{}{
 		"password_hash": hashed,
 	}); err != nil {
 		utils.InternalServerError(ctx, err, "Failed to update password")
@@ -247,7 +267,11 @@ func (c *AuthController) GoogleLogin(ctx *gin.Context) {
 // RegisterFCMToken stores the device FCM token for push notifications.
 // Called by the mobile app after obtaining a token from Firebase.
 func (c *AuthController) RegisterFCMToken(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 
 	var body struct {
 		Token string `json:"token" binding:"required"`
@@ -257,7 +281,7 @@ func (c *AuthController) RegisterFCMToken(ctx *gin.Context) {
 		return
 	}
 
-	if err := c.userRepo.UpdateFields(userID.(string), map[string]interface{}{
+	if err := c.userRepo.UpdateFields(userID, map[string]interface{}{
 		"fcm_token": body.Token,
 	}); err != nil {
 		utils.InternalServerError(ctx, err, "Failed to store FCM token")

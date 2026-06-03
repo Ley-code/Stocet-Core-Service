@@ -65,11 +65,13 @@ func (s *PortfolioService) GetPortfolio(userID string) (*PortfolioResponse, erro
 		return nil, err
 	}
 
+	priceMap := s.buildPriceMap()
+
 	enriched := make([]EnrichedHolding, 0, len(holdings))
 	var totalMV, totalCost float64
 
 	for _, h := range holdings {
-		e := s.enrichOne(h)
+		e := s.enrichOne(h, priceMap)
 		enriched = append(enriched, e)
 		totalMV += e.MarketValue
 		totalCost += e.CostBasis
@@ -94,11 +96,28 @@ func (s *PortfolioService) GetPortfolio(userID string) (*PortfolioResponse, erro
 	return &PortfolioResponse{Summary: summary, Holdings: enriched}, nil
 }
 
-func (s *PortfolioService) enrichOne(h models.PortfolioHolding) EnrichedHolding {
+func (s *PortfolioService) buildPriceMap() map[string]float64 {
+	priceMap := make(map[string]float64)
+	if s.marketSvc == nil {
+		return priceMap
+	}
+	prices, err := s.marketSvc.GetLatestAll()
+	if err != nil {
+		return priceMap
+	}
+	for _, mp := range prices {
+		priceMap[mp.TickerSymbol] = mp.Price
+	}
+	return priceMap
+}
+
+func (s *PortfolioService) enrichOne(h models.PortfolioHolding, priceMap map[string]float64) EnrichedHolding {
 	cost := h.Shares * h.BuyPrice
 	latest := h.BuyPrice
 
-	if s.marketSvc != nil {
+	if price, ok := priceMap[h.Ticker]; ok {
+		latest = price
+	} else if s.marketSvc != nil && priceMap == nil {
 		if mp, err := s.marketSvc.GetLatestByTicker(h.Ticker); err == nil && mp != nil {
 			latest = mp.Price
 		}
@@ -167,7 +186,7 @@ func (s *PortfolioService) Create(userID string, req CreateHoldingRequest) (*Enr
 		return nil, err
 	}
 
-	e := s.enrichOne(*h)
+	e := s.enrichOne(*h, nil)
 	return &e, nil
 }
 
@@ -207,7 +226,7 @@ func (s *PortfolioService) Update(userID, id string, req UpdateHoldingRequest) (
 		return nil, err
 	}
 
-	e := s.enrichOne(*h)
+	e := s.enrichOne(*h, nil)
 	return &e, nil
 }
 

@@ -16,9 +16,13 @@ func NewDashboardController(service *services.DashboardService) *DashboardContro
 }
 
 func (c *DashboardController) GetDashboard(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 
-	data, err := c.service.GetDashboardData(userID.(string))
+	data, err := c.service.GetDashboardData(userID)
 	if err != nil {
 		utils.InternalServerError(ctx, err, "Failed to fetch dashboard data")
 		return

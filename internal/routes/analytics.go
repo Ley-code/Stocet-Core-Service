@@ -8,11 +8,11 @@ import (
 )
 
 func SetupAnalyticsRoutes(router *gin.RouterGroup, controller *controllers.AnalyticsController) {
-	analytics := router.Group("/analytics")
+	analytics := router.Group("/analytics", middleware.AuthMiddleware())
 	{
 		analytics.GET("/dashboard", controller.GetDashboardMetrics)
 		analytics.GET("/market-overview", controller.GetMarketOverview)
-		analytics.GET("/user-activity/:user_id", middleware.AuthMiddleware(), middleware.RequireAdmin(), controller.GetUserActivity)
-		analytics.GET("/platform-health", middleware.AuthMiddleware(), middleware.RequireAdmin(), controller.GetPlatformHealth)
+		analytics.GET("/user-activity/:user_id", middleware.RequireAdmin(), controller.GetUserActivity)
+		analytics.GET("/platform-health", middleware.RequireAdmin(), controller.GetPlatformHealth)
 	}
 }

@@ -17,10 +17,14 @@ func NewArticleInteractionsController(service *services.ArticleInteractionsServi
 }
 
 func (c *ArticleInteractionsController) ToggleLike(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 	articleID := ctx.Param("id")
 
-	liked, count, err := c.service.ToggleLike(articleID, userID.(string))
+	liked, count, err := c.service.ToggleLike(articleID, userID)
 	if err != nil {
 		utils.BadRequest(ctx, err.Error())
 		return
@@ -33,10 +37,14 @@ func (c *ArticleInteractionsController) ToggleLike(ctx *gin.Context) {
 }
 
 func (c *ArticleInteractionsController) GetLikeStatus(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 	articleID := ctx.Param("id")
 
-	liked, count, err := c.service.GetLikeStatus(articleID, userID.(string))
+	liked, count, err := c.service.GetLikeStatus(articleID, userID)
 	if err != nil {
 		utils.BadRequest(ctx, err.Error())
 		return
@@ -67,7 +75,11 @@ func (c *ArticleInteractionsController) GetComments(ctx *gin.Context) {
 }
 
 func (c *ArticleInteractionsController) CreateComment(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 	userEmail, _ := ctx.Get("user_email")
 	articleID := ctx.Param("id")
 
@@ -81,7 +93,7 @@ func (c *ArticleInteractionsController) CreateComment(ctx *gin.Context) {
 	}
 
 	userName := userEmail.(string)
-	comment, err := c.service.CreateComment(articleID, userID.(string), userName, req.Content)
+	comment, err := c.service.CreateComment(articleID, userID, userName, req.Content)
 	if err != nil {
 		utils.BadRequest(ctx, err.Error())
 		return
@@ -91,10 +103,14 @@ func (c *ArticleInteractionsController) CreateComment(ctx *gin.Context) {
 }
 
 func (c *ArticleInteractionsController) DeleteComment(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 	commentID := ctx.Param("comment_id")
 
-	err := c.service.DeleteComment(commentID, userID.(string))
+	err := c.service.DeleteComment(commentID, userID)
 	if err != nil {
 		if err.Error() == "forbidden" {
 			utils.Forbidden(ctx, "You can only delete your own comments")

@@ -8,9 +8,11 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"log"
 	"math/big"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 
 	"stocet-core-service/internal/config"
@@ -25,6 +27,57 @@ import (
 
 // ErrUserNotVerified is returned when a user tries to login but hasn't verified their email.
 var ErrUserNotVerified = errors.New("USER_NOT_VERIFIED")
+
+const maxOTPAttempts = 10
+const otpLockoutDuration = 15 * time.Minute
+
+type otpAttemptState struct {
+	count       int
+	lockedUntil time.Time
+}
+
+var (
+	otpAttemptsMu sync.Mutex
+	otpAttempts   = make(map[string]*otpAttemptState)
+)
+
+func checkOTPLockout(email string) bool {
+	otpAttemptsMu.Lock()
+	defer otpAttemptsMu.Unlock()
+
+	state, ok := otpAttempts[email]
+	if !ok {
+		return false
+	}
+	if time.Now().Before(state.lockedUntil) {
+		return true
+	}
+	if state.count >= maxOTPAttempts {
+		delete(otpAttempts, email)
+	}
+	return false
+}
+
+func recordOTPFailedAttempt(email string) {
+	otpAttemptsMu.Lock()
+	defer otpAttemptsMu.Unlock()
+
+	state, ok := otpAttempts[email]
+	if !ok {
+		state = &otpAttemptState{}
+		otpAttempts[email] = state
+	}
+	state.count++
+	if state.count >= maxOTPAttempts {
+		state.lockedUntil = time.Now().Add(otpLockoutDuration)
+	}
+}
+
+func clearOTPAttempts(email string) {
+	otpAttemptsMu.Lock()
+	defer otpAttemptsMu.Unlock()
+	delete(otpAttempts, email)
+}
 
 type AuthService struct {
 	userRepo             *repositories.UserRepository
@@ -238,11 +291,11 @@ func (s *AuthService) Signup(req SignupRequest) (*SignupResponse, error) {
 		return nil, errors.New("failed to store verification code")
 	}
 
-	if err := s.sendVerificationEmail(email, fullName, code); err != nil {
-		_ = s.userRepo.Delete(user.ID)
-		_ = s.inviteCodeRepo.Release(inviteTrim)
-		return nil, errors.New("failed to send verification email")
-	}
+	go func() {
+		if err := s.sendVerificationEmail(email, fullName, code); err != nil {
+			log.Printf("[auth] signup verification email failed for %s: %v", email, err)
+		}
+	}()
 
 	if orgID != nil {
 		userUUID, parseErr := uuid.Parse(user.ID)
@@ -269,6 +322,10 @@ func (s *AuthService) VerifyEmail(req VerifyEmailRequest) (*VerifyEmailResponse,
 		return nil, errors.New("verification code must be 6 digits")
 	}
 
+	if checkOTPLockout(email) {
+		return nil, errors.New("too many failed attempts, try again later")
+	}
+
 	verificationCode, err := s.verificationCodeRepo.GetLatestActiveByEmail(email)
 	if err != nil {
 		return nil, errors.New("invalid or expired verification code")
@@ -279,8 +336,11 @@ func (s *AuthService) VerifyEmail(req VerifyEmailRequest) (*VerifyEmailResponse,
 	}
 
 	if verificationCode.CodeHash != hashVerificationCode(code) {
+		recordOTPFailedAttempt(email)
 		return nil, errors.New("invalid or expired verification code")
 	}
+
+	clearOTPAttempts(email)
 
 	if err := s.userRepo.SetVerifiedByEmail(email); err != nil {
 		return nil, errors.New("failed to verify email")
@@ -372,9 +432,12 @@ func (s *AuthService) ResendVerification(emailAddr string) error {
 		return errors.New("failed to store verification code")
 	}
 
-	if err := s.sendVerificationEmail(emailAddr, user.DisplayName(), code); err != nil {
-		return errors.New("failed to send verification email")
-	}
+	displayName := user.DisplayName()
+	go func() {
+		if err := s.sendVerificationEmail(emailAddr, displayName, code); err != nil {
+			log.Printf("[auth] resend verification email failed for %s: %v", emailAddr, err)
+		}
+	}()
 
 	return nil
 }

@@ -9,6 +9,9 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+const maxPriceHistoryDays = 730
+const maxTechnicalIndicatorDays = 365
+
 type MarketDataController struct {
 	service *services.MarketDataService
 }
@@ -83,6 +86,15 @@ func (c *MarketDataController) GetPriceHistory(ctx *gin.Context) {
 		endDate = time.Date(endDate.Year(), endDate.Month(), endDate.Day(), 23, 59, 59, 999999999, time.UTC)
 	}
 
+	if startDate.After(endDate) {
+		utils.BadRequest(ctx, "start_date must be before end_date")
+		return
+	}
+	maxEnd := startDate.AddDate(0, 0, maxPriceHistoryDays)
+	if endDate.After(maxEnd) {
+		endDate = maxEnd
+	}
+
 	prices, err := c.service.GetByTickerAndDateRange(ticker, startDate, endDate)
 	if err != nil {
 		utils.InternalServerError(ctx, err, "Failed to fetch price history")
@@ -104,6 +116,9 @@ func (c *MarketDataController) GetTechnicalIndicators(ctx *gin.Context) {
 		if parsed := utils.ParseInt(pd); parsed > 0 {
 			periodDays = parsed
 		}
+	}
+	if periodDays > maxTechnicalIndicatorDays {
+		periodDays = maxTechnicalIndicatorDays
 	}
 
 	indicators, err := c.service.ComputeTechnicalIndicators(ticker, periodDays)
@@ -148,6 +163,11 @@ func (c *MarketDataController) GetCandles(ctx *gin.Context) {
 		return
 	}
 
+	maxEnd := startDate.AddDate(0, 0, maxCandleSpanDays(resolution))
+	if endDate.After(maxEnd) {
+		endDate = maxEnd
+	}
+
 	fillGaps := fillGapsRaw != "false" && fillGapsRaw != "0"
 	candles, err := c.service.GetCandles(ticker, resolution, startDate, endDate, fillGaps)
 	if err != nil {
@@ -166,4 +186,20 @@ func (c *MarketDataController) GetCandles(ctx *gin.Context) {
 		"candles":       candles,
 		"total":         len(candles),
 	}, "")
+}
+
+// maxCandleSpanDays caps the requested date range per resolution to limit query size.
+func maxCandleSpanDays(resolution string) int {
+	switch strings.ToLower(strings.TrimSpace(resolution)) {
+	case "1m":
+		return 7
+	case "5m":
+		return 30
+	case "1h":
+		return 365
+	case "1d":
+		return maxPriceHistoryDays
+	default:
+		return 90
+	}
 }

@@ -33,9 +33,13 @@ func (ctrl *NotificationsController) HandleTriggerAlerts(c *gin.Context) {
 
 // GetUnreadNotifications returns all unread notifications for the authenticated user.
 func (ctrl *NotificationsController) GetUnreadNotifications(c *gin.Context) {
-	userID, _ := c.Get("user_id")
+	userID, ok := utils.GetUserID(c)
+	if !ok {
+		utils.Unauthorized(c, "User not authenticated")
+		return
+	}
 
-	notifications, err := ctrl.service.GetUnread(userID.(string))
+	notifications, err := ctrl.service.GetUnread(userID)
 	if err != nil {
 		utils.InternalServerError(c, err, "Failed to fetch unread notifications")
 		return
@@ -46,10 +50,14 @@ func (ctrl *NotificationsController) GetUnreadNotifications(c *gin.Context) {
 
 // MarkNotificationRead marks a single notification as read.
 func (ctrl *NotificationsController) MarkNotificationRead(c *gin.Context) {
-	userID, _ := c.Get("user_id")
+	userID, ok := utils.GetUserID(c)
+	if !ok {
+		utils.Unauthorized(c, "User not authenticated")
+		return
+	}
 	id := c.Param("id")
 
-	if err := ctrl.service.MarkRead(id, userID.(string)); err != nil {
+	if err := ctrl.service.MarkRead(id, userID); err != nil {
 		utils.NotFound(c, "Notification not found")
 		return
 	}
@@ -60,9 +68,13 @@ func (ctrl *NotificationsController) MarkNotificationRead(c *gin.Context) {
 // GetAllNotifications returns all notifications for the authenticated user,
 // ordered by created_at DESC.
 func (ctrl *NotificationsController) GetAllNotifications(c *gin.Context) {
-	userID, _ := c.Get("user_id")
+	userID, ok := utils.GetUserID(c)
+	if !ok {
+		utils.Unauthorized(c, "User not authenticated")
+		return
+	}
 
-	notifications, err := ctrl.service.GetAll(userID.(string))
+	notifications, err := ctrl.service.GetAll(userID)
 	if err != nil {
 		utils.InternalServerError(c, err, "Failed to fetch notifications")
 		return

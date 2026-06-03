@@ -1,13 +1,21 @@
 package services
 
 import (
+	"sync"
+	"time"
+
 	"stocet-core-service/internal/models"
 	"stocet-core-service/internal/repositories"
-	"time"
 )
+
+const latestPricesCacheTTL = 30 * time.Second
 
 type MarketDataService struct {
 	repo *repositories.MarketDataRepository
+
+	cacheMu     sync.RWMutex
+	cachedAt    time.Time
+	cachedPrices []models.MarketPrice
 }
 
 func NewMarketDataService(repo *repositories.MarketDataRepository) *MarketDataService {
@@ -15,7 +23,25 @@ func NewMarketDataService(repo *repositories.MarketDataRepository) *MarketDataSe
 }
 
 func (s *MarketDataService) GetLatestAll() ([]models.MarketPrice, error) {
-	return s.repo.GetLatestAll()
+	s.cacheMu.RLock()
+	if len(s.cachedPrices) > 0 && time.Since(s.cachedAt) < latestPricesCacheTTL {
+		prices := s.cachedPrices
+		s.cacheMu.RUnlock()
+		return prices, nil
+	}
+	s.cacheMu.RUnlock()
+
+	prices, err := s.repo.GetLatestAll()
+	if err != nil {
+		return nil, err
+	}
+
+	s.cacheMu.Lock()
+	s.cachedPrices = prices
+	s.cachedAt = time.Now()
+	s.cacheMu.Unlock()
+
+	return prices, nil
 }
 
 func (s *MarketDataService) GetAllTickers() ([]string, error) {

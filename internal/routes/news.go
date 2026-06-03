@@ -14,7 +14,7 @@ func SetupNewsRoutes(
 ) {
 	news := router.Group("/news", middleware.AuthMiddleware())
 	{
-		news.GET("", controller.GetNews)
+		news.GET("", middleware.RateLimitWhenQuery("q", 30, 30), controller.GetNews)
 		news.DELETE("/:id", middleware.RequireAdmin(), controller.DeleteNews)
 
 		news.DELETE("/comments/:comment_id", interactionsController.DeleteComment)

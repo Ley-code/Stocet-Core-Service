@@ -4,8 +4,14 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/lib/pq"
 	"gorm.io/gorm"
 )
+
+type ArticleLikeSummary struct {
+	Count int64
+	Liked bool
+}
 
 type ArticleComment struct {
 	ID        string    `json:"id"`
@@ -52,23 +58,70 @@ func (r *PostgresArticleInteractionsRepository) ToggleLike(articleID, userID str
 	return true, err
 }
 
-func (r *PostgresArticleInteractionsRepository) CountLikes(articleID string) (int64, error) {
-	var count int64
-	err := r.db.Raw(`
-		SELECT COUNT(*) FROM article_likes WHERE article_id = ?::uuid
-	`, articleID).Scan(&count).Error
-	return count, err
+func (r *PostgresArticleInteractionsRepository) GetLikeStatus(articleID, userID string) (ArticleLikeSummary, error) {
+	var summary ArticleLikeSummary
+	query := `
+		SELECT COUNT(*) AS count,
+		       COALESCE(bool_or(user_id = ?::uuid), false) AS liked
+		FROM article_likes
+		WHERE article_id = ?::uuid
+	`
+	args := []interface{}{userID, articleID}
+	if userID == "" {
+		query = `
+			SELECT COUNT(*) AS count, false AS liked
+			FROM article_likes
+			WHERE article_id = ?::uuid
+		`
+		args = []interface{}{articleID}
+	}
+
+	err := r.db.Raw(query, args...).Scan(&summary).Error
+	return summary, err
 }
 
-func (r *PostgresArticleInteractionsRepository) IsLikedByUser(articleID, userID string) (bool, error) {
-	var liked bool
-	err := r.db.Raw(`
-		SELECT EXISTS(
-			SELECT 1 FROM article_likes
-			WHERE article_id = ?::uuid AND user_id = ?::uuid
-		)
-	`, articleID, userID).Scan(&liked).Error
-	return liked, err
+type ArticleLikeCountRow struct {
+	ArticleID string
+	Count     int64
+	Liked     bool
+}
+
+func (r *PostgresArticleInteractionsRepository) GetLikeCounts(articleIDs []string, userID string) (map[string]ArticleLikeCountRow, error) {
+	result := make(map[string]ArticleLikeCountRow, len(articleIDs))
+	if len(articleIDs) == 0 {
+		return result, nil
+	}
+
+	var rows []ArticleLikeCountRow
+	query := `
+		SELECT article_id::text AS article_id,
+		       COUNT(*) AS count,
+		       COALESCE(bool_or(user_id = ?::uuid), false) AS liked
+		FROM article_likes
+		WHERE article_id = ANY(?::uuid[])
+		GROUP BY article_id
+	`
+	args := []interface{}{userID, pq.Array(articleIDs)}
+	if userID == "" {
+		query = `
+			SELECT article_id::text AS article_id,
+			       COUNT(*) AS count,
+			       false AS liked
+			FROM article_likes
+			WHERE article_id = ANY(?::uuid[])
+			GROUP BY article_id
+		`
+		args = []interface{}{pq.Array(articleIDs)}
+	}
+
+	if err := r.db.Raw(query, args...).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+
+	for _, row := range rows {
+		result[row.ArticleID] = row
+	}
+	return result, nil
 }
 
 func (r *PostgresArticleInteractionsRepository) CreateComment(articleID, userID, userName, content string) (*ArticleComment, error) {

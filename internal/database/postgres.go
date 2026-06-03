@@ -30,9 +30,14 @@ func InitDB() error {
 		config.AppConfig.PostgresSSLMode,
 	)
 
+	logLevel := logger.Info
+	if config.AppConfig.Environment == "production" {
+		logLevel = logger.Warn
+	}
+
 	var err error
 	DB, err = gorm.Open(postgres.Open(dsn), &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: logger.Default.LogMode(logLevel),
 	})
 
 	if err != nil {

@@ -262,7 +262,20 @@ func (r *NotificationsRepository) fireAlert(p fireParams) error {
 		return fmt.Errorf("commit: %w", err)
 	}
 
-	// Fetch FCM token for this user (best-effort, outside transaction)
+	// FCM and email are best-effort; do not block the alert matcher.
+	delivery := p
+	delivery.conditionText = condText
+	go r.deliverAlertNotification(delivery)
+
+	return nil
+}
+
+func (r *NotificationsRepository) deliverAlertNotification(p fireParams) {
+	condText := p.conditionText
+	if condText == "" {
+		condText = buildConditionText(p.alertType, p.condition, p.threshold, p.price, p.percentChange)
+	}
+
 	var fcmToken string
 	if r.fcm != nil && r.fcm.Enabled() {
 		var u models.User
@@ -273,7 +286,6 @@ func (r *NotificationsRepository) fireAlert(p fireParams) error {
 		}
 	}
 
-	// Send push notification (best-effort)
 	if fcmToken != "" {
 		pushCtx, cancel := context.WithTimeout(context.Background(), 8*time.Second)
 		defer cancel()
@@ -286,7 +298,6 @@ func (r *NotificationsRepository) fireAlert(p fireParams) error {
 		}
 	}
 
-	// Send email (best-effort)
 	if r.emailSender != nil && r.emailSender.Enabled() && strings.TrimSpace(p.userEmail) != "" {
 		deepLink := fmt.Sprintf("https://stocet.com/markets?symbol=%s", p.ticker)
 		data := email.AlertEmailData{
@@ -303,8 +314,6 @@ func (r *NotificationsRepository) fireAlert(p fireParams) error {
 			logrus.Printf("[alerts] email send failed alert=%s to=%s: %v", p.alertID, p.userEmail, err)
 		}
 	}
-
-	return nil
 }
 
 func buildConditionText(alertType, condition string, threshold, price, pct float64) string {

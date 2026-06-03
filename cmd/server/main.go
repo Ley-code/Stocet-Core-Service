@@ -51,6 +51,7 @@ func SetupRouter() *gin.Engine {
 
 	// Initialize repositories
 	userRepo := repositories.NewUserRepository()
+	middleware.SetAdminUserRepository(userRepo)
 	cspRepo := repositories.NewCapitalServiceProvidersRepository()
 	educationRepo := repositories.NewEducationRepository()
 	chatRepo := repositories.NewChatRepository()
@@ -115,7 +116,7 @@ func SetupRouter() *gin.Engine {
 	notificationsController := controllers.NewNotificationsController(notificationsService)
 	notifPrefRepo := repositories.NewNotificationPreferenceRepository()
 	notifPrefController := controllers.NewNotificationPreferenceController(notifPrefRepo)
-	newsController := controllers.NewNewsController(newsService)
+	newsController := controllers.NewNewsController(newsService, articleInteractionsService)
 	articleInteractionsController := controllers.NewArticleInteractionsController(articleInteractionsService)
 	marketDataController := controllers.NewMarketDataController(marketDataService)
 	analyticsController := controllers.NewAnalyticsController(analyticsService)
@@ -134,7 +135,7 @@ func SetupRouter() *gin.Engine {
 	auditRepo := repositories.NewAuditLogRepository()
 	auditController := controllers.NewAuditLogController(auditRepo)
 	adminAnalyticsController := controllers.NewAdminAnalyticsController()
-	aiController := controllers.NewAIController(aiService, aiQuotaService)
+	aiController := controllers.NewAIController(aiService, aiQuotaService, userRepo)
 
 	// Setup Gin router
 	if config.AppConfig.Environment == "production" {

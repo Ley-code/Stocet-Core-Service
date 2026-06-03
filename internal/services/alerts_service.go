@@ -56,8 +56,8 @@ func (s *AlertsService) GetByID(id string) (*models.Alert, error) {
 	return s.repo.GetByID(id)
 }
 
-func (s *AlertsService) GetByUserID(userID string) ([]models.Alert, error) {
-	return s.repo.GetByUserID(userID)
+func (s *AlertsService) GetByUserID(userID string, limit int) ([]models.Alert, error) {
+	return s.repo.GetByUserID(userID, limit)
 }
 
 func (s *AlertsService) GetActiveAlerts() ([]models.Alert, error) {

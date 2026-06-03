@@ -33,9 +33,14 @@ func (s *WatchlistService) Add(userID, ticker string) (*models.Watchlist, error)
 		return nil, errors.New("ticker already in watchlist")
 	}
 
+	userUUID, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, errors.New("invalid user ID")
+	}
+
 	item := &models.Watchlist{
 		ID:     uuid.New().String(),
-		UserID: uuid.MustParse(userID),
+		UserID: userUUID,
 		Ticker: ticker,
 	}
 

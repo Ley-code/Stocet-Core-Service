@@ -20,8 +20,12 @@ func NewNotificationPreferenceController(
 
 // Get godoc — GET /notifications/preferences
 func (c *NotificationPreferenceController) Get(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
-	pref, err := c.repo.Get(userID.(string))
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
+	pref, err := c.repo.Get(userID)
 	if err != nil {
 		utils.InternalServerError(ctx, err, "Failed to fetch notification preferences")
 		return
@@ -31,16 +35,20 @@ func (c *NotificationPreferenceController) Get(ctx *gin.Context) {
 
 // Update godoc — PUT /notifications/preferences
 func (c *NotificationPreferenceController) Update(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 
-	uid, err := uuid.Parse(userID.(string))
+	uid, err := uuid.Parse(userID)
 	if err != nil {
 		utils.BadRequest(ctx, "invalid user id")
 		return
 	}
 
 	// Load existing first (creates defaults if missing)
-	pref, err := c.repo.Get(userID.(string))
+	pref, err := c.repo.Get(userID)
 	if err != nil {
 		utils.InternalServerError(ctx, err, "Failed to fetch preferences")
 		return

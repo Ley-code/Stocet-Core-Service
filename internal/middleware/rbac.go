@@ -2,24 +2,51 @@ package middleware
 
 import (
 	"stocet-core-service/internal/config"
+	"stocet-core-service/internal/repositories"
 	"stocet-core-service/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
 
+var adminUserRepo *repositories.UserRepository
+
+// SetAdminUserRepository enables DB-backed admin checks in RequireAdmin.
+func SetAdminUserRepository(repo *repositories.UserRepository) {
+	adminUserRepo = repo
+}
+
+func userHasRole(c *gin.Context, requiredRole string) bool {
+	if adminUserRepo != nil {
+		userID, ok := utils.GetUserID(c)
+		if !ok {
+			return false
+		}
+		user, err := adminUserRepo.GetByID(userID)
+		if err != nil {
+			return false
+		}
+		c.Set("user_role", user.Role)
+		c.Set("user_subscription", user.SubscriptionStatus)
+		return string(user.Role) == requiredRole
+	}
+
+	userRole, exists := c.Get("user_role")
+	if !exists {
+		return false
+	}
+	role, ok := userRole.(string)
+	return ok && role == requiredRole
+}
+
 // RequireRole checks if the user has the required role
 func RequireRole(requiredRole string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userRole, exists := c.Get("user_role")
-		if !exists {
-			utils.Unauthorized(c, "User role not found")
-			c.Abort()
-			return
-		}
-
-		role, ok := userRole.(string)
-		if !ok || role != requiredRole {
-			utils.Forbidden(c, "Insufficient permissions")
+		if !userHasRole(c, requiredRole) {
+			if _, ok := utils.GetUserID(c); !ok {
+				utils.Unauthorized(c, "User role not found")
+			} else {
+				utils.Forbidden(c, "Insufficient permissions")
+			}
 			c.Abort()
 			return
 		}
@@ -36,28 +63,18 @@ func RequireAdmin() gin.HandlerFunc {
 // RequireAnyRole checks if the user has any of the required roles
 func RequireAnyRole(roles ...string) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		userRole, exists := c.Get("user_role")
-		if !exists {
-			utils.Unauthorized(c, "User role not found")
-			c.Abort()
-			return
-		}
-
-		role, ok := userRole.(string)
-		if !ok {
-			utils.Forbidden(c, "Invalid user role")
-			c.Abort()
-			return
-		}
-
 		for _, requiredRole := range roles {
-			if role == requiredRole {
+			if userHasRole(c, requiredRole) {
 				c.Next()
 				return
 			}
 		}
 
-		utils.Forbidden(c, "Insufficient permissions")
+		if _, ok := utils.GetUserID(c); !ok {
+			utils.Unauthorized(c, "User role not found")
+		} else {
+			utils.Forbidden(c, "Insufficient permissions")
+		}
 		c.Abort()
 	}
 }

@@ -58,7 +58,11 @@ func (c *EducationController) GetLesson(ctx *gin.Context) {
 }
 
 func (c *EducationController) SubmitQuiz(ctx *gin.Context) {
-	userID, _ := ctx.Get("user_id")
+	userID, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "User not authenticated")
+		return
+	}
 	lessonID := ctx.Param("lesson_id")
 
 	var req struct {
@@ -70,7 +74,7 @@ func (c *EducationController) SubmitQuiz(ctx *gin.Context) {
 		return
 	}
 
-	submission, err := c.service.SubmitQuiz(userID.(string), lessonID, req.Answers)
+	submission, err := c.service.SubmitQuiz(userID, lessonID, req.Answers)
 	if err != nil {
 		utils.BadRequest(ctx, err.Error())
 		return
