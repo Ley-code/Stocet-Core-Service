@@ -18,7 +18,10 @@ func SetupAdminRoutes(
 	analyticsController *controllers.AdminAnalyticsController,
 	fundamentalsController *controllers.FundamentalsController,
 	embeddingsAdmin *controllers.EmbeddingsAdminController,
+	marketDataAdminController *controllers.MarketDataAdminController,
+	chatController *controllers.ChatController,
 	auditRepo *repositories.AuditLogRepository,
+	earningsController *controllers.EarningsController,
 ) {
 	admin := router.Group("/admin",
 		middleware.AuthMiddleware(),
@@ -44,9 +47,25 @@ func SetupAdminRoutes(
 
 		// Usage analytics
 		admin.GET("/analytics", analyticsController.Get)
+
+		// Market data feed status
+		if marketDataAdminController != nil {
+			admin.GET("/market-data/status", marketDataAdminController.FeedStatus)
+		}
+
+		// Chat moderation
+		if chatController != nil {
+			adminChat := admin.Group("/chat")
+			adminChat.GET("/reports", chatController.AdminListReports)
+			adminChat.PATCH("/reports/:id", chatController.AdminResolveReport)
+			adminChat.POST("/mute", chatController.AdminMuteUser)
+			adminChat.DELETE("/mute/:userId", chatController.AdminUnmuteUser)
+			adminChat.GET("/mutes", chatController.AdminListMutes)
+		}
 	}
 	RegisterOrganizationRoutes(admin, orgController)
 	RegisterCorporateActionAdminRoutes(admin, caController)
+	RegisterEarningsAdminRoutes(admin, earningsController)
 	if fundamentalsController != nil {
 		RegisterFundamentalsRoutes(admin, fundamentalsController)
 	}

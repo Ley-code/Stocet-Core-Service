@@ -43,3 +43,39 @@ func (Channel) TableName() string {
 func (Message) TableName() string {
 	return "messages"
 }
+
+type ChatMute struct {
+	ID        uuid.UUID  `gorm:"primaryKey;type:uuid;default:gen_random_uuid()" json:"id"`
+	UserID    uuid.UUID  `gorm:"type:uuid;not null"                             json:"user_id"`
+	MutedBy   uuid.UUID  `gorm:"type:uuid;not null"                             json:"muted_by"`
+	ChannelID *uuid.UUID `gorm:"type:uuid"                                      json:"channel_id,omitempty"`
+	Reason    *string    `gorm:"type:text"                                      json:"reason,omitempty"`
+	ExpiresAt *time.Time `                                                      json:"expires_at,omitempty"`
+	CreatedAt time.Time  `                                                      json:"created_at"`
+}
+
+func (ChatMute) TableName() string { return "chat_mutes" }
+
+type ChatReportStatus string
+
+const (
+	ChatReportPending   ChatReportStatus = "pending"
+	ChatReportResolved  ChatReportStatus = "resolved"
+	ChatReportDismissed ChatReportStatus = "dismissed"
+)
+
+type ChatReport struct {
+	ID         uuid.UUID        `gorm:"primaryKey;type:uuid;default:gen_random_uuid()" json:"id"`
+	MessageID  uuid.UUID        `gorm:"type:uuid;not null"                             json:"message_id"`
+	ReportedBy uuid.UUID        `gorm:"type:uuid;not null"                             json:"reported_by"`
+	Reason     string           `gorm:"type:text;not null"                             json:"reason"`
+	Status     ChatReportStatus `gorm:"type:varchar(20);not null;default:'pending'"    json:"status"`
+	ReviewedBy *uuid.UUID       `gorm:"type:uuid"                                      json:"reviewed_by,omitempty"`
+	ReviewedAt *time.Time       `                                                      json:"reviewed_at,omitempty"`
+	CreatedAt  time.Time        `                                                      json:"created_at"`
+	// joined fields
+	MessageContent *string `gorm:"-" json:"message_content,omitempty"`
+	ReporterName   *string `gorm:"-" json:"reporter_name,omitempty"`
+}
+
+func (ChatReport) TableName() string { return "chat_reports" }

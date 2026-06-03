@@ -3,6 +3,7 @@ package controllers
 import (
 	"strings"
 
+	"stocet-core-service/internal/database"
 	"stocet-core-service/internal/services"
 	"stocet-core-service/internal/utils"
 
@@ -139,4 +140,33 @@ func (c *OrganizationController) RemoveMember(ctx *gin.Context) {
 		return
 	}
 	utils.SuccessResponse(ctx, 200, nil, "Member removed")
+}
+
+// GetMyOrgBranding godoc
+// GET /org/branding — returns brand_color and logo_url for the authenticated user's org
+func (c *OrganizationController) GetMyOrgBranding(ctx *gin.Context) {
+	userIDStr, ok := utils.GetUserID(ctx)
+	if !ok {
+		utils.Unauthorized(ctx, "unauthorized")
+		return
+	}
+
+	type result struct {
+		BrandColor *string `json:"brand_color"`
+		LogoURL    *string `json:"logo_url"`
+		Name       string  `json:"name"`
+	}
+	var r result
+	err := database.DB.Raw(`
+		SELECT o.brand_color, o.logo_url, o.name
+		FROM organizations o
+		INNER JOIN org_members om ON om.org_id = o.id
+		WHERE om.user_id = ?
+		LIMIT 1
+	`, userIDStr).Scan(&r).Error
+	if err != nil {
+		utils.SuccessResponse(ctx, 200, gin.H{}, "")
+		return
+	}
+	utils.SuccessResponse(ctx, 200, r, "")
 }

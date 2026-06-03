@@ -1,0 +1,3 @@
+DROP TABLE IF EXISTS chat_reports;
+DROP TABLE IF EXISTS chat_mutes;
+ALTER TABLE messages DROP COLUMN IF EXISTS deleted_by;

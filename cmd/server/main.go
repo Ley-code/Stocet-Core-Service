@@ -142,6 +142,8 @@ func SetupRouter() *gin.Engine {
 	screenerController := controllers.NewScreenerController()
 	caRepo := repositories.NewCorporateActionRepository()
 	corporateActionController := controllers.NewCorporateActionController(caRepo)
+	earningsRepo := repositories.NewEarningsRepository()
+	earningsController := controllers.NewEarningsController(earningsRepo)
 	auditRepo := repositories.NewAuditLogRepository()
 	auditController := controllers.NewAuditLogController(auditRepo)
 	adminAnalyticsController := controllers.NewAdminAnalyticsController()
@@ -175,14 +177,17 @@ func SetupRouter() *gin.Engine {
 		routes.SetupNotificationsRoutes(api, notificationsController, notifPrefController)
 		routes.SetupAnalyticsRoutes(api, analyticsController)
 		routes.SetupDashboardRoutes(api, dashboardController)
-		routes.SetupAdminRoutes(api, adminController, inviteCodesAdminController, organizationController, corporateActionController, auditController, adminAnalyticsController, fundamentalsController, embeddingsAdminController, auditRepo)
+		marketDataAdminController := controllers.NewMarketDataAdminController()
+		routes.SetupAdminRoutes(api, adminController, inviteCodesAdminController, organizationController, corporateActionController, auditController, adminAnalyticsController, fundamentalsController, embeddingsAdminController, marketDataAdminController, chatController, auditRepo, earningsController)
 		routes.SetupFundamentalsPublicRoutes(api, fundamentalsController)
 		routes.SetupWatchlistRoutes(api, watchlistController)
 		routes.SetupPortfolioRoutes(api, portfolioController, subscriptionService)
 		routes.SetupAdvisoryRoutes(api, advisoryController, subscriptionService)
 		routes.SetupScreenerRoutes(api, screenerController)
 		routes.SetupCorporateActionRoutes(api, corporateActionController)
+		routes.SetupEarningsRoutes(api, earningsController)
 		routes.SetupAIRoutes(api, aiController, subscriptionService)
+		routes.SetupOrgRoutes(api, organizationController)
 	}
 
 	// Long-running embedding backfill is only safe outside Lambda (where

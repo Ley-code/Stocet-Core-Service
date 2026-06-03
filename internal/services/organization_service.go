@@ -34,11 +34,13 @@ type CreateOrgRequest struct {
 }
 
 type UpdateOrgRequest struct {
-	Name      *string `json:"name"`
-	Slug      *string `json:"slug"`
-	Plan      *string `json:"plan"`
-	SeatLimit *int    `json:"seat_limit"`
-	LogoURL   *string `json:"logo_url"`
+	Name         *string `json:"name"`
+	Slug         *string `json:"slug"`
+	Plan         *string `json:"plan"`
+	SeatLimit    *int    `json:"seat_limit"`
+	LogoURL      *string `json:"logo_url"`
+	BrandColor   *string `json:"brand_color"`
+	CustomDomain *string `json:"custom_domain"`
 }
 
 type OrgListItem struct {
@@ -232,6 +234,22 @@ func (s *OrganizationService) UpdateOrg(id string, req UpdateOrgRequest) (*model
 			org.LogoURL = nil
 		} else {
 			org.LogoURL = &u
+		}
+	}
+	if req.BrandColor != nil {
+		v := strings.TrimSpace(*req.BrandColor)
+		if v == "" {
+			org.BrandColor = nil
+		} else {
+			org.BrandColor = &v
+		}
+	}
+	if req.CustomDomain != nil {
+		v := strings.TrimSpace(*req.CustomDomain)
+		if v == "" {
+			org.CustomDomain = nil
+		} else {
+			org.CustomDomain = &v
 		}
 	}
 

@@ -1,0 +1,2 @@
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS brand_color VARCHAR(7);
+ALTER TABLE organizations ADD COLUMN IF NOT EXISTS custom_domain VARCHAR(253);

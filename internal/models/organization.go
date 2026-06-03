@@ -22,15 +22,17 @@ const (
 )
 
 type Organization struct {
-	ID        uuid.UUID  `gorm:"primaryKey;type:uuid;default:gen_random_uuid()" json:"id"`
-	Name      string     `gorm:"type:text;not null"                              json:"name"`
-	Slug      string     `gorm:"uniqueIndex;type:varchar(63);not null"           json:"slug"`
-	Plan      OrgPlan    `gorm:"type:varchar(20);not null;default:'starter'"     json:"plan"`
-	SeatLimit int        `gorm:"not null;default:10"                             json:"seat_limit"`
-	LogoURL   *string    `gorm:"type:text"                                       json:"logo_url,omitempty"`
-	CreatedBy *uuid.UUID `gorm:"type:uuid"                                       json:"created_by,omitempty"`
-	CreatedAt time.Time  `                                                       json:"created_at"`
-	UpdatedAt time.Time  `                                                       json:"updated_at"`
+	ID           uuid.UUID  `gorm:"primaryKey;type:uuid;default:gen_random_uuid()" json:"id"`
+	Name         string     `gorm:"type:text;not null"                              json:"name"`
+	Slug         string     `gorm:"uniqueIndex;type:varchar(63);not null"           json:"slug"`
+	Plan         OrgPlan    `gorm:"type:varchar(20);not null;default:'starter'"     json:"plan"`
+	SeatLimit    int        `gorm:"not null;default:10"                             json:"seat_limit"`
+	LogoURL      *string    `gorm:"type:text"                                       json:"logo_url,omitempty"`
+	BrandColor   *string    `gorm:"type:varchar(7)"                                 json:"brand_color,omitempty"`
+	CustomDomain *string    `gorm:"type:varchar(253)"                               json:"custom_domain,omitempty"`
+	CreatedBy    *uuid.UUID `gorm:"type:uuid"                                       json:"created_by,omitempty"`
+	CreatedAt    time.Time  `                                                       json:"created_at"`
+	UpdatedAt    time.Time  `                                                       json:"updated_at"`
 }
 
 func (Organization) TableName() string { return "organizations" }

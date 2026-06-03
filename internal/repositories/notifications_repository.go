@@ -199,7 +199,24 @@ type fireParams struct {
 	now           time.Time
 }
 
+func (r *NotificationsRepository) getUserNotifPrefs(userID string) (*models.NotificationPreference, error) {
+	var pref models.NotificationPreference
+	err := database.DB.Where("user_id = ?", userID).First(&pref).Error
+	if err != nil {
+		return &models.NotificationPreference{
+			PriceAlertPush:  true,
+			PriceAlertEmail: true,
+			NewsAlertPush:   true,
+			NewsAlertEmail:  true,
+			InAppEnabled:    true,
+		}, nil
+	}
+	return &pref, nil
+}
+
 func (r *NotificationsRepository) fireAlert(p fireParams) error {
+	prefs, _ := r.getUserNotifPrefs(p.userID)
+
 	tx := database.DB.Begin()
 	if tx.Error != nil {
 		return tx.Error
@@ -217,15 +234,17 @@ func (r *NotificationsRepository) fireAlert(p fireParams) error {
 		condText = buildConditionText(p.alertType, p.condition, p.threshold, p.price, p.percentChange)
 	}
 
-	// Notification
-	notification := models.Notification{
-		UserID:  userUUID,
-		Title:   fmt.Sprintf("Alert: %s", p.ticker),
-		Message: condText,
-	}
-	if err := tx.Create(&notification).Error; err != nil {
-		tx.Rollback()
-		return fmt.Errorf("create notification: %w", err)
+	// Notification (in-app) — only create when in_app_enabled
+	if prefs.InAppEnabled {
+		notification := models.Notification{
+			UserID:  userUUID,
+			Title:   fmt.Sprintf("Alert: %s", p.ticker),
+			Message: condText,
+		}
+		if err := tx.Create(&notification).Error; err != nil {
+			tx.Rollback()
+			return fmt.Errorf("create notification: %w", err)
+		}
 	}
 
 	// Trigger history
@@ -276,8 +295,14 @@ func (r *NotificationsRepository) deliverAlertNotification(p fireParams) {
 		condText = buildConditionText(p.alertType, p.condition, p.threshold, p.price, p.percentChange)
 	}
 
+	prefs, _ := r.getUserNotifPrefs(p.userID)
+
+	isPriceAlert := p.alertType == "price" || p.alertType == "percent_change"
+	wantPush := (isPriceAlert && prefs.PriceAlertPush) || (!isPriceAlert && prefs.NewsAlertPush)
+	wantEmail := (isPriceAlert && prefs.PriceAlertEmail) || (!isPriceAlert && prefs.NewsAlertEmail)
+
 	var fcmToken string
-	if r.fcm != nil && r.fcm.Enabled() {
+	if wantPush && r.fcm != nil && r.fcm.Enabled() {
 		var u models.User
 		if err := database.DB.Select("fcm_token").Where("id = ?", p.userID).First(&u).Error; err == nil {
 			if u.FCMToken != nil {
@@ -298,7 +323,7 @@ func (r *NotificationsRepository) deliverAlertNotification(p fireParams) {
 		}
 	}
 
-	if r.emailSender != nil && r.emailSender.Enabled() && strings.TrimSpace(p.userEmail) != "" {
+	if wantEmail && r.emailSender != nil && r.emailSender.Enabled() && strings.TrimSpace(p.userEmail) != "" {
 		deepLink := fmt.Sprintf("https://stocet.com/markets?symbol=%s", p.ticker)
 		data := email.AlertEmailData{
 			Ticker:        p.ticker,
