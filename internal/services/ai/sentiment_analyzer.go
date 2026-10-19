@@ -21,7 +21,10 @@ type SentimentResult struct {
 // ClassifyNewsSentiment calls Gemini to classify a single article and returns
 // the structured result. Returns an error only on API or parse failure — the
 // caller should fall back to "neutral" in that case.
-func ClassifyNewsSentiment(ctx context.Context, client *GeminiClient, title, summary string) (*SentimentResult, error) {
+//
+// validTickers is the set of real ESX ticker codes. They are given to the model and any other code it
+// returns is dropped — without this the model invented plausible-looking tickers (e.g. "CBE", "AWB").
+func ClassifyNewsSentiment(ctx context.Context, client *GeminiClient, title, summary string, validTickers []string) (*SentimentResult, error) {
 	if !client.Configured() {
 		return nil, fmt.Errorf("sentiment: gemini not configured")
 	}
@@ -45,9 +48,10 @@ Rules:
 - sentiment: "bullish" (positive for investors: profit growth, expansion, dividends, strong results)
              "bearish" (negative for investors: losses, regulatory issues, scandal, poor results)
              "neutral" (general market info, policy news with unclear direction)
-- tickers: ESX company ticker symbols that are directly mentioned or clearly affected. Empty array if none.
-           ESX tickers are short uppercase letter codes (e.g. CBE, AWB, ACSI).
-- confidence: 0.0 to 1.0`, articleText)
+- tickers: ONLY codes from this list of ESX-listed securities: %s
+           Include a code only if that company is directly mentioned or clearly affected. Empty array if none.
+           Never output a code that is not in the list.
+- confidence: 0.0 to 1.0`, articleText, tickerListForPrompt(validTickers))
 
 	temp := 0.0
 	// 150 tokens truncated the JSON mid-object on thinking models; leave generous headroom.
@@ -80,9 +84,7 @@ Rules:
 	default:
 		result.Sentiment = "neutral"
 	}
-	if result.Tickers == nil {
-		result.Tickers = []string{}
-	}
+	result.Tickers = filterTickers(result.Tickers, validTickers)
 	if result.Confidence < 0 {
 		result.Confidence = 0
 	}
@@ -91,6 +93,31 @@ Rules:
 	}
 
 	return &result, nil
+}
+
+func tickerListForPrompt(valid []string) string {
+	if len(valid) == 0 {
+		return "(none known — return an empty array)"
+	}
+	return strings.Join(valid, ", ")
+}
+
+// filterTickers keeps only codes present in valid (case-insensitive), upper-cased and de-duplicated.
+func filterTickers(got, valid []string) []string {
+	allowed := make(map[string]bool, len(valid))
+	for _, v := range valid {
+		allowed[strings.ToUpper(strings.TrimSpace(v))] = true
+	}
+	out := []string{}
+	seen := map[string]bool{}
+	for _, t := range got {
+		t = strings.ToUpper(strings.TrimSpace(t))
+		if t != "" && allowed[t] && !seen[t] {
+			seen[t] = true
+			out = append(out, t)
+		}
+	}
+	return out
 }
 
 // RunSentimentBackfillOnce fetches one batch of unanalyzed articles and
@@ -108,6 +135,12 @@ func RunSentimentBackfillOnce(ctx context.Context, client *GeminiClient, repo re
 		return 0, fmt.Errorf("sentiment backfill: fetch: %w", err)
 	}
 
+	validTickers, err := repo.GetKnownTickers()
+	if err != nil {
+		log.Printf("[sentiment] could not load known tickers, tagging none: %v", err)
+		validTickers = nil
+	}
+
 	processed := 0
 	consecutiveFailures := 0
 	for _, article := range articles {
@@ -115,7 +148,7 @@ func RunSentimentBackfillOnce(ctx context.Context, client *GeminiClient, repo re
 			continue
 		}
 
-		result, err := ClassifyNewsSentiment(ctx, client, article.Title, article.Summary)
+		result, err := ClassifyNewsSentiment(ctx, client, article.Title, article.Summary, validTickers)
 		if err != nil {
 			// Leave the article unanalysed so a later run retries it. (Stamping "neutral" on every
 			// error — including quota 429s — permanently mislabelled articles.) If the API keeps

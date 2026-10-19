@@ -368,6 +368,20 @@ func (r *PostgresNewsRepository) GetUnanalyzed(limit int) ([]SentimentArticle, e
 	return articles, nil
 }
 
+// GetKnownTickers returns ticker codes that have a recent price on record plus any with a company profile.
+func (r *PostgresNewsRepository) GetKnownTickers() ([]string, error) {
+	var tickers []string
+	err := r.db.Raw(`
+		SELECT DISTINCT upper(ticker_symbol) FROM (
+			SELECT ticker_symbol FROM market_prices WHERE timestamp > NOW() - interval '120 days'
+			UNION
+			SELECT ticker_symbol FROM company_profiles
+		) t
+		WHERE ticker_symbol IS NOT NULL AND ticker_symbol <> ''
+		ORDER BY 1`).Scan(&tickers).Error
+	return tickers, err
+}
+
 func (r *PostgresNewsRepository) UpdateSentiment(
 	ctx context.Context,
 	id string,
