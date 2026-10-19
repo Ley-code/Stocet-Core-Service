@@ -254,7 +254,7 @@ func (r *PostgresNewsRepository) GetNewsFacets(days int) (*NewsFacets, error) {
 		days = 30
 	}
 	window := "published_date >= NOW() - make_interval(days => ?)"
-	f := &NewsFacets{Days: days, Sentiment: map[string]int64{"bullish": 0, "neutral": 0, "bearish": 0, "unanalyzed": 0}}
+	f := &NewsFacets{Days: days, Sources: []FacetCount{}, Categories: []FacetCount{}, Tickers: []FacetCount{}, Daily: []DailyNewsCount{}, Sentiment: map[string]int64{"bullish": 0, "neutral": 0, "bearish": 0, "unanalyzed": 0}}
 
 	if err := r.db.Raw("SELECT COUNT(*) FROM articles WHERE "+window, days).Scan(&f.Total).Error; err != nil {
 		return nil, err
