@@ -23,7 +23,7 @@ Instead of money sitting under a mattress, it is lent or invested in return for 
 |---|---|---|
 | What happens | A company or government **issues new securities** for the first time | Investors **trade existing securities** with each other |
 | Who gets the money | The issuer | The seller (not the issuer) |
-| Ethiopian example | An IPO or public offer, such as when Ethio Telecom sold shares to the public in 2026 | Buying and selling Awash Bank (AWAB) shares on the ESX |
+| Ethiopian example | An IPO or public offer, such as the public offering of Ethio Telecom shares | Buying and selling Awash Bank (AWAB) shares on the ESX |
 
 The secondary market matters even though the company receives nothing from it, because it gives investors **liquidity**: the confidence that they can sell later. People are far more willing to invest in the primary market when they know a secondary market exists.
 
