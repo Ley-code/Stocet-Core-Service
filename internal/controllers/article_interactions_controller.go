@@ -37,11 +37,8 @@ func (c *ArticleInteractionsController) ToggleLike(ctx *gin.Context) {
 }
 
 func (c *ArticleInteractionsController) GetLikeStatus(ctx *gin.Context) {
-	userID, ok := utils.GetUserID(ctx)
-	if !ok {
-		utils.Unauthorized(ctx, "User not authenticated")
-		return
-	}
+	// Guests get the public like count with liked=false (empty userID).
+	userID, _ := utils.GetUserID(ctx)
 	articleID := ctx.Param("id")
 
 	liked, count, err := c.service.GetLikeStatus(articleID, userID)

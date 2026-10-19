@@ -16,11 +16,8 @@ func NewDashboardController(service *services.DashboardService) *DashboardContro
 }
 
 func (c *DashboardController) GetDashboard(ctx *gin.Context) {
-	userID, ok := utils.GetUserID(ctx)
-	if !ok {
-		utils.Unauthorized(ctx, "User not authenticated")
-		return
-	}
+	// Guests get market data without personalised alerts (empty userID).
+	userID, _ := utils.GetUserID(ctx)
 
 	data, err := c.service.GetDashboardData(userID)
 	if err != nil {

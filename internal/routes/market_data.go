@@ -8,7 +8,8 @@ import (
 )
 
 func SetupMarketDataRoutes(router *gin.RouterGroup, controller *controllers.MarketDataController) {
-	market := router.Group("/market-prices", middleware.AuthMiddleware())
+	// Read-only market data is open to guests (rate limited per IP).
+	market := router.Group("/market-prices", middleware.OptionalAuthMiddleware(), middleware.RateLimitByIP(120, 60))
 	{
 		market.GET("", controller.GetMarketPrices)
 		market.GET("/tickers", controller.GetTickers)
@@ -17,10 +18,14 @@ func SetupMarketDataRoutes(router *gin.RouterGroup, controller *controllers.Mark
 		market.GET("/:ticker/indicators", controller.GetTechnicalIndicators)
 	}
 
+	openCandles := router.Group("/market", middleware.OptionalAuthMiddleware(), middleware.RateLimitByIP(120, 60))
+	{
+		openCandles.GET("/candles/:ticker", controller.GetCandles)
+		openCandles.GET("/candles/:ticker/patterns", controller.GetCandlePatterns)
+	}
+
 	candles := router.Group("/market", middleware.AuthMiddleware())
 	{
-		candles.GET("/candles/:ticker", controller.GetCandles)
-		candles.GET("/candles/:ticker/patterns", controller.GetCandlePatterns)
 		candles.GET("/chart-layouts", controller.ListChartLayouts)
 		candles.POST("/chart-layouts", controller.CreateChartLayout)
 		candles.PUT("/chart-layouts/:id", controller.UpdateChartLayout)

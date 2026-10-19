@@ -78,6 +78,9 @@ func (s *DashboardService) GetDashboardData(userID string) (*DashboardData, erro
 	})
 
 	g.Go(func() error {
+		if userID == "" {
+			return nil
+		}
 		var err error
 		userAlerts, err = s.alertsService.GetByUserID(userID, repositories.DefaultAlertsListLimit)
 		if err != nil {

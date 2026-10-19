@@ -8,7 +8,7 @@ import (
 )
 
 func SetupDashboardRoutes(router *gin.RouterGroup, controller *controllers.DashboardController) {
-	dashboard := router.Group("/dashboard", middleware.AuthMiddleware())
+	dashboard := router.Group("/dashboard", middleware.OptionalAuthMiddleware(), middleware.RateLimitByIP(60, 30))
 	{
 		dashboard.GET("", controller.GetDashboard)
 	}

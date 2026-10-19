@@ -8,10 +8,14 @@ import (
 )
 
 func SetupAnalyticsRoutes(router *gin.RouterGroup, controller *controllers.AnalyticsController) {
+	open := router.Group("/analytics", middleware.OptionalAuthMiddleware(), middleware.RateLimitByIP(60, 30))
+	{
+		open.GET("/market-overview", controller.GetMarketOverview)
+	}
+
 	analytics := router.Group("/analytics", middleware.AuthMiddleware())
 	{
 		analytics.GET("/dashboard", controller.GetDashboardMetrics)
-		analytics.GET("/market-overview", controller.GetMarketOverview)
 		analytics.GET("/user-activity/:user_id", middleware.RequireAdmin(), controller.GetUserActivity)
 		analytics.GET("/platform-health", middleware.RequireAdmin(), controller.GetPlatformHealth)
 	}

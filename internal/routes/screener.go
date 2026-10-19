@@ -11,8 +11,8 @@ func SetupScreenerRoutes(router *gin.RouterGroup, controller *controllers.Screen
 	if controller == nil {
 		return
 	}
-	// Auth required — data is not sensitive but keeps anonymous traffic out.
-	screener := router.Group("/screener", middleware.AuthMiddleware())
+	// Open to guests, rate limited per IP.
+	screener := router.Group("/screener", middleware.OptionalAuthMiddleware(), middleware.RateLimitByIP(60, 30))
 	{
 		screener.GET("", controller.Search)
 	}

@@ -19,6 +19,13 @@ func SetupNewsRoutes(
 		news.GET("/:id/related", controller.GetRelatedNews)
 	}
 
+	// Reading likes and comments is open; writing still requires an account.
+	readOnly := news.Group("", middleware.OptionalAuthMiddleware())
+	{
+		readOnly.GET("/:id/likes/count", interactionsController.GetLikeStatus)
+		readOnly.GET("/:id/comments", interactionsController.GetComments)
+	}
+
 	protected := news.Group("", middleware.AuthMiddleware())
 	{
 		protected.GET("/for-you", controller.GetForYouNews)
@@ -29,8 +36,6 @@ func SetupNewsRoutes(
 
 		protected.DELETE("/comments/:comment_id", interactionsController.DeleteComment)
 		protected.POST("/:id/like", interactionsController.ToggleLike)
-		protected.GET("/:id/likes/count", interactionsController.GetLikeStatus)
-		protected.GET("/:id/comments", interactionsController.GetComments)
 		protected.POST("/:id/comments", interactionsController.CreateComment)
 	}
 }
