@@ -5,6 +5,7 @@ Sources (all public):
   - ESX company directory pages (profile, board, auditor, shares, filings): https://esx.et/directory/<slug>/
   - Audited financial statements for FY ended 30 June 2026 / 2025 (ESX PDFs)
   - Sidama Bank Annual Report 2024/25, Ethio Telecom prospectus Annex 1 (FY2022-24), Ethio Telecom FY2025/26 business report
+Shares/capital = paid-up share capital at 30 Jun 2026 (audited) / par, which can exceed ESX "listed shares" after later capital increases.
 Money values below are in statement units (Birr'000 unless noted) and converted to full ETB.
 EPS is ETB per share at the stated par value (banks: 1,000; Ethio Telecom: 100).
 """
@@ -20,13 +21,13 @@ ESX = "https://esx.et/wp-content/uploads"
 
 companies = [
  dict(t="WGBX", name="Wegagen Bank Share Company", sector="Banking", nob="Financial Services - Banking", listed="2025-01-10", inc="1997-06-11",
-      auditor="Tafesse, Shisema, and Ayelew Certified Audit Partnership (FY2025); TMS Plus Audit Service LLP (FY2026)", shares=6218635, capital=6218635000, par=1000,
+      auditor="Tafesse, Shisema, and Ayelew Certified Audit Partnership (FY2025); TMS Plus Audit Service LLP (FY2026)", shares=10094666, capital=10094666000, par=1000,
       email="info@wegagenbanksc.com.et", phone="+251-115-523800", addr="Wegagen Tower, Ras Mekonnen Street, Kirkos Sub-City, Woreda 10, Addis Ababa (in front of Addis Ababa Stadium)", web="https://www.wegagen.com", holders=14549),
  dict(t="GDAB", name="Gadaa Bank Share Company", sector="Banking", nob="Financial Services - Banking", listed="2025-06-13", inc="2022-04-26",
-      auditor="Tewodros and Fikre Audit Services Partnership (FY2025); Kokeb & Melkamu Audit Service LLP (FY2026)", shares=1232728, capital=1232728000, par=1000,
+      auditor="Tewodros and Fikre Audit Services Partnership (FY2025); Kokeb & Melkamu Audit Service LLP (FY2026)", shares=1654458, capital=1654458000, par=1000,
       email="info@gadaabank.com.et", phone="+251-116-392578", addr="Head Office, Gotera, Kirkos Sub-City, Woreda 03, House No. 745, Addis Ababa", web="https://gadaabank.com.et", holders=31136),
  dict(t="AWAB", name="Awash Bank Share Company", sector="Banking", nob="Financial Services - Banking", listed="2026-04-23", inc="1994-11-10",
-      auditor="Audit Service Corporation (ASC)", shares=37896928, capital=37896928000, par=1000,
+      auditor="Audit Service Corporation (ASC)", shares=38492985, capital=38492985000, par=1000,
       email="contactcenter@awashbank.com", phone="0115-57-12-54 / 0115-57-13-24", addr="Ras Abebe Aregay Street, P.O. Box 12638, Addis Ababa", web="https://awashbank.com", holders=12143),
  dict(t="TELE", name="Ethio Telecom Share Company", sector="Telecom", nob="Telecoms, Infrastructure Sharing, and Mobile Financial Services", listed="2026-05-26", inc="2024-07-01",
       auditor="Audit Services Corporation", shares=1000000000, capital=100000000000, par=100,
