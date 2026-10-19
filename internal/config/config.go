@@ -74,7 +74,8 @@ func LoadConfig() error {
 	_ = godotenv.Load()
 
 	AppConfig = &Config{
-		ServerPort: getEnv("SERVER_PORT", "8080"),
+		// Container hosts (Render, Fly, Cloud Run…) inject PORT; SERVER_PORT still wins when set.
+		ServerPort: getEnv("SERVER_PORT", getEnv("PORT", "8080")),
 		ServerHost: getEnv("SERVER_HOST", "0.0.0.0"),
 
 		PostgresHost:     getEnv("POSTGRES_HOST", "localhost"),

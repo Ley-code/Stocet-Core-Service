@@ -1,0 +1,39 @@
+# Render blueprint: https://render.com/docs/blueprint-spec
+# Secrets are marked `sync: false`, so Render asks for them in the dashboard and they never live in git.
+services:
+  - type: web
+    name: stocet-core-service
+    runtime: docker
+    dockerfilePath: ./docker/Dockerfile
+    plan: free
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      # Neon Postgres (use the *direct* / unpooled host if migrations or LISTEN are ever needed)
+      - { key: POSTGRES_HOST, sync: false }
+      - { key: POSTGRES_PORT, value: "5432" }
+      - { key: POSTGRES_DB, sync: false }
+      - { key: POSTGRES_USER, sync: false }
+      - { key: POSTGRES_PASSWORD, sync: false }
+      - { key: POSTGRES_SSLMODE, value: require }
+      - { key: JWT_SECRET, sync: false }
+      - { key: INTERNAL_SECRET, sync: false }
+      - { key: GOOGLE_CLIENT_ID, sync: false }
+      - { key: MONGODB_URL, sync: false }
+      - { key: MONGODB_DB_NAME, sync: false }
+      - { key: SMTP_HOST, sync: false }
+      - { key: SMTP_PORT, sync: false }
+      - { key: SMTP_USERNAME, sync: false }
+      - { key: SMTP_PASSWORD, sync: false }
+      - { key: SMTP_FROM, sync: false }
+      - { key: CLAUDE_API_KEY, sync: false }
+      - { key: CLAUDE_MODEL, sync: false }
+      - { key: GEMINI_API_KEY, sync: false }
+      # The free Gemini tier gives gemini-2.5-flash a tiny daily quota; flash-lite has its own.
+      - { key: GEMINI_CHAT_MODEL, value: gemini-flash-lite-latest }
+      - { key: GEMINI_EMBED_MODEL, value: gemini-embedding-001 }
+      - { key: AI_CHAT_MAX_TURNS, value: "12" }
+      - { key: AI_CHAT_MAX_CHARS, value: "4000" }
+      - { key: AI_REQUEST_TIMEOUT_SEC, value: "60" }
+      - { key: AI_BACKFILL_INTERVAL_SEC, value: "900" }
+      - { key: AI_BACKFILL_BATCH_SIZE, value: "10" }
