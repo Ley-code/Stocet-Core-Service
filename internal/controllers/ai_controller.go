@@ -122,7 +122,7 @@ func (c *AIController) Chat(ctx *gin.Context) {
 		return
 	}
 	if !c.svc.Configured() {
-		log.Printf("[ai][chat] 503 client_ip=%s reason=gemini_not_configured (set GEMINI_API_KEY in Lambda/env)", ctx.ClientIP())
+		log.Printf("[ai][chat] 503 client_ip=%s reason=gemini_not_configured (set GEMINI_API_KEY in the environment)", ctx.ClientIP())
 		respondGraceful(ctx)
 		return
 	}

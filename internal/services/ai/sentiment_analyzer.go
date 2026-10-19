@@ -184,8 +184,8 @@ func RunSentimentBackfillOnce(ctx context.Context, client *GeminiClient, repo re
 	return processed, nil
 }
 
-// StartSentimentWorker runs a periodic sentiment backfill — call from main()
-// outside of Lambda. Runs once immediately then on every interval.
+// StartSentimentWorker runs a periodic sentiment backfill — call once from main().
+// Runs once immediately then on every interval.
 func StartSentimentWorker(ctx context.Context, client *GeminiClient, repo repositories.SentimentBackfillRepository, interval time.Duration, batchSize int) {
 	if !client.Configured() {
 		log.Println("[sentiment] worker skipped (gemini not configured)")

@@ -1,20 +1,16 @@
-.PHONY: build clean package migrate-up migrate-down migrate-create migrate-force
+.PHONY: build run clean migrate-up migrate-down migrate-create migrate-force
 
 # ---------------------------------------------------------------------------
-# Build targets (AWS Lambda)
+# Build / run
 # ---------------------------------------------------------------------------
-
-# Build a statically-linked binary for AWS Lambda (Amazon Linux 2023 / Graviton).
 build:
-	CGO_ENABLED=0 GOOS=linux GOARCH=arm64 go build -tags lambda.norpc \
-		-o bootstrap cmd/server/main.go
+	go build -o app ./cmd/server
 
-# Package the binary into a deployment zip for Lambda upload.
-package: build
-	zip deployment.zip bootstrap
+run:
+	go run ./cmd/server
 
 clean:
-	rm -f bootstrap deployment.zip
+	rm -f app
 
 # ---------------------------------------------------------------------------
 # Database Migration targets (golang-migrate)

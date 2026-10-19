@@ -2,7 +2,7 @@
 //
 // gemini_client.go is a thin REST client over Google's Generative Language API
 // (https://generativelanguage.googleapis.com/v1beta). We use net/http directly
-// instead of an SDK so the binary stays small (Lambda-friendly) and to keep
+// instead of an SDK so the binary stays small and to keep
 // transitive dependencies minimal.
 package ai
 

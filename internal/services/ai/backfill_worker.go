@@ -13,10 +13,7 @@ import (
 // embedding (the fire-and-forget goroutine in the admin path may have failed,
 // or rows pre-date the AI feature) and embeds them in small batches.
 //
-// On AWS Lambda this should NOT be started: long-lived goroutines are killed
-// when the invocation returns and may interfere with cold-start budgets.
-// In Lambda deployments, a separate scheduled invocation should call
-// RunBackfillOnce(ctx, ...) instead.
+// It runs for the life of the process, so start it once from main().
 func StartBackfillWorker(ctx context.Context, embedder *Embedder, interval time.Duration, batchSize int) {
 	if embedder == nil || !embedder.Configured() {
 		log.Println("[ai] backfill worker skipped (embedder not configured)")

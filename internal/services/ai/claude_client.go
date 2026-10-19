@@ -1,6 +1,6 @@
 // Package ai — claude_client.go is a thin REST client over Anthropic's Messages API
 // (https://api.anthropic.com/v1/messages). We use net/http directly (no SDK) to keep
-// the binary Lambda-friendly. Embeddings remain on GeminiClient.
+// the binary small. Embeddings remain on GeminiClient.
 package ai
 
 import (

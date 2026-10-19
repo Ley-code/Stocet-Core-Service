@@ -14,7 +14,7 @@ const (
 // and comparing the wall-clock minute-of-day against the open/close window.
 //
 // Falls back to a fixed UTC+3 offset if the IANA tz data isn't installed
-// in the runtime image (matters on minimal Lambda containers).
+// in the runtime image (matters on minimal container images).
 func IsEATMarketOpen(now time.Time) bool {
 	loc, err := time.LoadLocation("Africa/Addis_Ababa")
 	if err != nil {

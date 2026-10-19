@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"log"
-	"os"
 	"time"
 
 	"stocet-core-service/internal/config"
@@ -17,22 +16,10 @@ import (
 	"stocet-core-service/internal/services"
 	"stocet-core-service/internal/services/ai"
 
-	"github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-lambda-go/lambda"
-	ginadapter "github.com/awslabs/aws-lambda-go-api-proxy/gin"
 	"github.com/gin-gonic/gin"
 )
 
-var ginLambda *ginadapter.GinLambdaV2
-
-// Handler is the Lambda entry point that proxies API Gateway requests to the Gin router.
-func Handler(ctx context.Context, req events.APIGatewayV2HTTPRequest) (events.APIGatewayV2HTTPResponse, error) {
-	return ginLambda.ProxyWithContext(ctx, req)
-}
-
 // SetupRouter initialises all dependencies and returns the fully configured Gin engine.
-// The function is safe to call multiple times (e.g. Lambda warm starts) because the
-// underlying database connections use singleton guards.
 func SetupRouter() *gin.Engine {
 	// Load configuration
 	if err := config.LoadConfig(); err != nil {
@@ -158,7 +145,8 @@ func SetupRouter() *gin.Engine {
 
 	router := gin.New()
 	router.Use(middleware.LoggingMiddleware())
-	// router.Use(middleware.CORSMiddleware())
+	// The frontend is on another origin, so the API itself must answer CORS headers and preflight requests.
+	router.Use(middleware.CORSMiddleware())
 	router.Use(gin.Recovery())
 
 	// Health check
@@ -194,43 +182,31 @@ func SetupRouter() *gin.Engine {
 		routes.SetupOrgRoutes(api, organizationController)
 	}
 
-	// Long-running embedding backfill is only safe outside Lambda (where
-	// the process is recycled per invocation). On Lambda, schedule a
-	// separate job to call ai.RunBackfillOnce(...) periodically.
-	if os.Getenv("LAMBDA_TASK_ROOT") == "" {
-		go ai.StartBackfillWorker(
-			context.Background(),
-			embedder,
-			time.Duration(config.AppConfig.AIBackfillIntervalSec)*time.Second,
-			config.AppConfig.AIBackfillBatchSize,
-		)
-		go ai.StartSentimentWorker(
-			context.Background(),
-			geminiClient,
-			newsRepo,
-			15*time.Minute,
-			20,
-		)
-	}
+	// Background workers: fill in missing embeddings and classify the sentiment of new articles.
+	go ai.StartBackfillWorker(
+		context.Background(),
+		embedder,
+		time.Duration(config.AppConfig.AIBackfillIntervalSec)*time.Second,
+		config.AppConfig.AIBackfillBatchSize,
+	)
+	go ai.StartSentimentWorker(
+		context.Background(),
+		geminiClient,
+		newsRepo,
+		15*time.Minute,
+		20,
+	)
 
 	return router
 }
 
 func main() {
 	router := SetupRouter()
+	defer database.CloseDB()
 
-	if os.Getenv("LAMBDA_TASK_ROOT") != "" {
-		// Running on AWS Lambda — bridge via API Gateway adapter
-		ginLambda = ginadapter.NewV2(router)
-		lambda.Start(Handler)
-	} else {
-		// Running locally — standard HTTP server
-		defer database.CloseDB()
-
-		addr := config.AppConfig.ServerHost + ":" + config.AppConfig.ServerPort
-		log.Printf("Server starting on %s", addr)
-		if err := router.Run(addr); err != nil {
-			log.Fatal("Failed to start server:", err)
-		}
+	addr := config.AppConfig.ServerHost + ":" + config.AppConfig.ServerPort
+	log.Printf("Server starting on %s", addr)
+	if err := router.Run(addr); err != nil {
+		log.Fatal("Failed to start server:", err)
 	}
 }

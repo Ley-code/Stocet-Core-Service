@@ -14,7 +14,7 @@ import (
 var DB *gorm.DB
 
 // InitDB initializes the PostgreSQL database connection.
-// On subsequent calls (e.g. Lambda warm starts) the existing connection is reused.
+// On subsequent calls the existing connection is reused.
 func InitDB() error {
 	if DB != nil {
 		return nil

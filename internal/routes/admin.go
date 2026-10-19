@@ -72,8 +72,8 @@ func SetupAdminRoutes(
 	if embeddingsAdmin != nil {
 		admin.POST("/ai/embeddings/backfill", embeddingsAdmin.RunBackfill)
 		admin.POST("/ai/sentiment/backfill", embeddingsAdmin.RunSentimentBackfill)
-		// Same job for the aggregation worker, which has no user token. On Lambda the in-process
-		// sentiment worker never runs, so the worker calls this after each harvest.
+		// Same job for the aggregation worker, which has no user token: it calls this after each harvest so new
+		// articles are classified straight away (and it wakes the service if the host put it to sleep).
 		router.POST("/internal/sentiment/backfill", middleware.InternalSecretMiddleware(), embeddingsAdmin.RunSentimentBackfill)
 	}
 }
