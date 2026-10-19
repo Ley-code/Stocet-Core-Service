@@ -230,3 +230,27 @@ func (r *PostgresArticleInteractionsRepository) GetCommentByID(commentID string)
 func (r *PostgresArticleInteractionsRepository) DeleteComment(commentID string) error {
 	return r.db.Exec(`DELETE FROM article_comments WHERE id = ?::uuid`, commentID).Error
 }
+
+// GetCommentCounts returns the number of comments per article id.
+func (r *PostgresArticleInteractionsRepository) GetCommentCounts(articleIDs []string) (map[string]int64, error) {
+	result := make(map[string]int64, len(articleIDs))
+	if len(articleIDs) == 0 {
+		return result, nil
+	}
+	var rows []struct {
+		ArticleID string
+		Count     int64
+	}
+	err := r.db.Raw(`
+		SELECT article_id::text AS article_id, COUNT(*) AS count
+		FROM article_comments
+		WHERE article_id = ANY(?::uuid[])
+		GROUP BY article_id`, pq.Array(articleIDs)).Scan(&rows).Error
+	if err != nil {
+		return nil, err
+	}
+	for _, row := range rows {
+		result[row.ArticleID] = row.Count
+	}
+	return result, nil
+}

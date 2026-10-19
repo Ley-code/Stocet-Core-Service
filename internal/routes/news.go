@@ -12,9 +12,11 @@ func SetupNewsRoutes(
 	controller *controllers.NewsController,
 	interactionsController *controllers.ArticleInteractionsController,
 ) {
-	news := router.Group("/news")
+	// OptionalAuth so a signed-in reader gets their own liked flags in the list.
+	news := router.Group("/news", middleware.OptionalAuthMiddleware())
 	{
 		news.GET("", middleware.RateLimitWhenQuery("q", 30, 30), controller.GetNews)
+		news.GET("/facets", controller.GetNewsFacets)
 		news.GET("/trending", controller.GetTrendingNews)
 		news.GET("/:id/related", controller.GetRelatedNews)
 	}

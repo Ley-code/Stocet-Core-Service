@@ -40,6 +40,10 @@ func (s *ArticleInteractionsService) GetLikeStatus(articleID, userID string) (bo
 	return summary.Liked, summary.Count, err
 }
 
+func (s *ArticleInteractionsService) GetCommentCounts(articleIDs []string) (map[string]int64, error) {
+	return s.repo.GetCommentCounts(articleIDs)
+}
+
 func (s *ArticleInteractionsService) GetLikeCounts(articleIDs []string, userID string) (map[string]repositories.ArticleLikeCountRow, error) {
 	return s.repo.GetLikeCounts(articleIDs, userID)
 }

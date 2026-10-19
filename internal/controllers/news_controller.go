@@ -74,9 +74,15 @@ func (c *NewsController) GetNews(ctx *gin.Context) {
 	sentiment := ctx.Query("sentiment")
 	filters := c.service.BuildFilters(category, source, searchText, sentiment, ticker, startDate, endDate)
 
+	sort := ctx.Query("sort")
+	if sort == "most_liked" || sort == "most_discussed" {
+		filters["sort"] = sort
+	}
+
 	var cursorPublished *time.Time
 	var cursorID *string
-	if cursorParam != "" {
+	// Engagement sorts can't use a (date, id) cursor, so they page by offset.
+	if cursorParam != "" && filters["sort"] == nil {
 		ts, id, err := utils.DecodeNewsCursor(cursorParam)
 		if err != nil {
 			utils.BadRequest(ctx, "Invalid cursor")
@@ -87,7 +93,7 @@ func (c *NewsController) GetNews(ctx *gin.Context) {
 	}
 
 	skip := 0
-	if cursorParam == "" {
+	if cursorParam == "" || filters["sort"] != nil {
 		if s := ctx.Query("skip"); s != "" {
 			if v, err := strconv.Atoi(s); err == nil && v >= 0 {
 				skip = v
@@ -125,6 +131,11 @@ func (c *NewsController) GetNews(ctx *gin.Context) {
 				}
 			}
 		}
+		if commentCounts, err := c.interactionsService.GetCommentCounts(articleIDs); err == nil {
+			for i := range articles {
+				articles[i].CommentCount = commentCounts[articles[i].ID]
+			}
+		}
 	}
 
 	total, err := c.service.CountNews(filters)
@@ -134,7 +145,7 @@ func (c *NewsController) GetNews(ctx *gin.Context) {
 	}
 
 	nextCursor := ""
-	if len(articles) == limit {
+	if len(articles) == limit && filters["sort"] == nil {
 		last := articles[len(articles)-1]
 		if last.ID != "" {
 			nextCursor = utils.EncodeNewsCursor(last.PublishedDate, last.ID)
@@ -148,6 +159,23 @@ func (c *NewsController) GetNews(ctx *gin.Context) {
 		"skip":        skip,
 		"next_cursor": nextCursor,
 	}, "")
+}
+
+// GetNewsFacets handles GET /news/facets?days=30: counts by source, category, ticker and sentiment,
+// plus a per-day series. Powers the filter UI and the news metrics strip.
+func (c *NewsController) GetNewsFacets(ctx *gin.Context) {
+	days := 30
+	if d := ctx.Query("days"); d != "" {
+		if v, err := strconv.Atoi(d); err == nil && v > 0 {
+			days = v
+		}
+	}
+	facets, err := c.service.GetNewsFacets(days)
+	if err != nil {
+		utils.InternalServerError(ctx, err, "Failed to compute news facets")
+		return
+	}
+	utils.SuccessResponse(ctx, http.StatusOK, facets, "")
 }
 
 func (c *NewsController) DeleteNews(ctx *gin.Context) {

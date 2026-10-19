@@ -200,6 +200,8 @@ type GeminiRequest struct {
 type GeminiGenerationConfig struct {
 	Temperature     *float64 `json:"temperature,omitempty"`
 	MaxOutputTokens *int     `json:"maxOutputTokens,omitempty"`
+	// ResponseMimeType "application/json" makes Gemini return bare JSON (no fences, no preamble).
+	ResponseMimeType string `json:"responseMimeType,omitempty"`
 }
 
 // GeminiCandidate is one generation option.

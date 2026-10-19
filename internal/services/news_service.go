@@ -21,6 +21,10 @@ func (s *NewsService) CountNews(filters map[string]interface{}) (int64, error) {
 	return s.repo.CountNews(filters)
 }
 
+func (s *NewsService) GetNewsFacets(days int) (*repositories.NewsFacets, error) {
+	return s.repo.GetNewsFacets(days)
+}
+
 func (s *NewsService) DeleteNews(id string) error {
 	return s.repo.DeleteNews(id)
 }

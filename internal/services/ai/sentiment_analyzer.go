@@ -50,12 +50,14 @@ Rules:
 - confidence: 0.0 to 1.0`, articleText)
 
 	temp := 0.0
-	maxTokens := 150
+	// 150 tokens truncated the JSON mid-object on thinking models; leave generous headroom.
+	maxTokens := 600
 	resp, err := client.GenerateContent(ctx, GeminiRequest{
 		Contents: []GeminiContent{NewUserContent(prompt)},
 		GenerationConfig: &GeminiGenerationConfig{
-			Temperature:     &temp,
-			MaxOutputTokens: &maxTokens,
+			Temperature:      &temp,
+			MaxOutputTokens:  &maxTokens,
+			ResponseMimeType: "application/json",
 		},
 	})
 	if err != nil {
@@ -107,6 +109,7 @@ func RunSentimentBackfillOnce(ctx context.Context, client *GeminiClient, repo re
 	}
 
 	processed := 0
+	consecutiveFailures := 0
 	for _, article := range articles {
 		if article.ID == "" {
 			continue
@@ -114,12 +117,18 @@ func RunSentimentBackfillOnce(ctx context.Context, client *GeminiClient, repo re
 
 		result, err := ClassifyNewsSentiment(ctx, client, article.Title, article.Summary)
 		if err != nil {
-			log.Printf("[sentiment] skipping article %v: %v", article.ID, err)
-			if updateErr := repo.UpdateSentiment(ctx, article.ID, "neutral", []string{}, nil); updateErr != nil {
-				log.Printf("[sentiment] update failed for %v: %v", article.ID, updateErr)
+			// Leave the article unanalysed so a later run retries it. (Stamping "neutral" on every
+			// error — including quota 429s — permanently mislabelled articles.) If the API keeps
+			// failing, stop the batch rather than burning quota.
+			log.Printf("[sentiment] will retry article %v later: %v", article.ID, err)
+			consecutiveFailures++
+			if consecutiveFailures >= 3 {
+				log.Printf("[sentiment] %d failures in a row, ending this batch", consecutiveFailures)
+				break
 			}
 			continue
 		}
+		consecutiveFailures = 0
 
 		if err := repo.UpdateSentiment(ctx, article.ID, result.Sentiment, result.Tickers, &result.Confidence); err != nil {
 			log.Printf("[sentiment] update failed for %v: %v", article.ID, err)

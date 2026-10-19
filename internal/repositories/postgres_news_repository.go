@@ -28,7 +28,9 @@ type NewsArticle struct {
 	SentimentConfidence *float64   `json:"sentiment_confidence,omitempty"`
 	SentimentTickers    []string   `json:"sentiment_tickers,omitempty"`
 	SentimentAnalyzedAt *time.Time `json:"sentiment_analyzed_at,omitempty"`
-	LikeCount           int64      `json:"like_count,omitempty"`
+	LikeCount           int64      `json:"like_count"`
+	CommentCount        int64      `json:"comment_count"`
+	ReadingTimeMin      int        `json:"reading_time_min"`
 	Liked               bool       `json:"liked,omitempty"`
 	Bookmarked          bool       `json:"bookmarked,omitempty"`
 }
@@ -61,12 +63,13 @@ func (b *newsSQLBuilder) whereClause() string {
 func buildNewsSQLFilters(filters map[string]interface{}) newsSQLBuilder {
 	builder := newsSQLBuilder{}
 
+	// category / source / sentiment accept comma-separated lists (OR within a field, AND across fields).
 	if category, ok := filters["category"].(string); ok && category != "" {
-		builder.add("? = ANY(tags)", category)
+		builder.add("tags && ?::text[]", pq.Array(splitList(category)))
 	}
 
 	if source, ok := filters["source"].(string); ok && source != "" {
-		builder.add("source = ?", source)
+		builder.add("source = ANY(?::text[])", pq.Array(splitList(source)))
 	}
 
 	if startDate, ok := filters["start_date"].(time.Time); ok {
@@ -85,10 +88,13 @@ func buildNewsSQLFilters(filters map[string]interface{}) newsSQLBuilder {
 	}
 
 	if sentiment, ok := filters["sentiment"].(string); ok && sentiment != "" {
-		if sentiment == "analyzed" {
+		switch sentiment {
+		case "analyzed":
 			builder.add("(sentiment IS NOT NULL AND sentiment <> '')")
-		} else {
-			builder.add("sentiment = ?", sentiment)
+		case "unanalyzed":
+			builder.add("(sentiment IS NULL OR sentiment = '')")
+		default:
+			builder.add("sentiment = ANY(?::text[])", pq.Array(splitList(sentiment)))
 		}
 	}
 
@@ -97,6 +103,17 @@ func buildNewsSQLFilters(filters map[string]interface{}) newsSQLBuilder {
 	}
 
 	return builder
+}
+
+func splitList(v string) []string {
+	parts := strings.Split(v, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func (r *PostgresNewsRepository) CountNews(filters map[string]interface{}) (int64, error) {
@@ -117,6 +134,10 @@ func (r *PostgresNewsRepository) GetNews(
 	cursorID *string,
 ) ([]NewsArticle, error) {
 	builder := buildNewsSQLFilters(filters)
+
+	if sort, _ := filters["sort"].(string); sort == "most_liked" || sort == "most_discussed" {
+		return r.getNewsByEngagement(builder, sort, limit, skip)
+	}
 
 	if cursorPublished != nil && cursorID != nil {
 		builder.add(
@@ -168,6 +189,108 @@ func (r *PostgresNewsRepository) GetNews(
 	return articles, nil
 }
 
+// getNewsByEngagement orders by like or comment volume (newest first on ties). Offset pagination only.
+func (r *PostgresNewsRepository) getNewsByEngagement(builder newsSQLBuilder, sort string, limit, skip int) ([]NewsArticle, error) {
+	order := "likes DESC, comments DESC"
+	if sort == "most_discussed" {
+		order = "comments DESC, likes DESC"
+	}
+	query := fmt.Sprintf(`
+		SELECT
+			a.id, a.title, a.url, a.source, a.published_date, a.content,
+			COALESCE(a.summary, '') AS summary,
+			COALESCE(a.tags, ARRAY[]::text[]) AS tags,
+			COALESCE(a.image_url, '') AS image_url,
+			COALESCE(a.sentiment, '') AS sentiment,
+			a.sentiment_confidence,
+			COALESCE(a.sentiment_tickers, ARRAY[]::text[]) AS sentiment_tickers,
+			a.sentiment_analyzed_at
+		FROM (SELECT * FROM articles %s) a
+		LEFT JOIN (SELECT article_id, COUNT(*) AS n FROM article_likes GROUP BY article_id) l ON l.article_id = a.id
+		LEFT JOIN (SELECT article_id, COUNT(*) AS n FROM article_comments GROUP BY article_id) c ON c.article_id = a.id
+		CROSS JOIN LATERAL (SELECT COALESCE(l.n, 0) AS likes, COALESCE(c.n, 0) AS comments) e
+		ORDER BY %s, a.published_date DESC, a.id DESC
+		OFFSET ? LIMIT ?
+	`, builder.whereClause(), order)
+
+	args := append(append([]interface{}{}, builder.args...), skip, limit)
+	var rows []models.Article
+	if err := r.db.Raw(query, args...).Scan(&rows).Error; err != nil {
+		return nil, err
+	}
+	articles := make([]NewsArticle, 0, len(rows))
+	for _, row := range rows {
+		articles = append(articles, mapArticleModel(row))
+	}
+	return articles, nil
+}
+
+// NewsFacets summarises the recent news mix for filter UIs and the metrics strip.
+type NewsFacets struct {
+	Total      int64            `json:"total"`
+	Days       int              `json:"days"`
+	Sources    []FacetCount     `json:"sources"`
+	Categories []FacetCount     `json:"categories"`
+	Tickers    []FacetCount     `json:"tickers"`
+	Sentiment  map[string]int64 `json:"sentiment"`
+	Daily      []DailyNewsCount `json:"daily"`
+}
+
+type FacetCount struct {
+	Name  string `json:"name"`
+	Count int64  `json:"count"`
+}
+
+type DailyNewsCount struct {
+	Date    string `json:"date"`
+	Total   int64  `json:"total"`
+	Bullish int64  `json:"bullish"`
+	Neutral int64  `json:"neutral"`
+	Bearish int64  `json:"bearish"`
+}
+
+func (r *PostgresNewsRepository) GetNewsFacets(days int) (*NewsFacets, error) {
+	if days <= 0 || days > 365 {
+		days = 30
+	}
+	window := "published_date >= NOW() - make_interval(days => ?)"
+	f := &NewsFacets{Days: days, Sentiment: map[string]int64{"bullish": 0, "neutral": 0, "bearish": 0, "unanalyzed": 0}}
+
+	if err := r.db.Raw("SELECT COUNT(*) FROM articles WHERE "+window, days).Scan(&f.Total).Error; err != nil {
+		return nil, err
+	}
+	if err := r.db.Raw(`SELECT source AS name, COUNT(*) AS count FROM articles WHERE `+window+` GROUP BY source ORDER BY count DESC`, days).Scan(&f.Sources).Error; err != nil {
+		return nil, err
+	}
+	if err := r.db.Raw(`SELECT t AS name, COUNT(*) AS count FROM articles, unnest(tags) t WHERE `+window+` GROUP BY t ORDER BY count DESC`, days).Scan(&f.Categories).Error; err != nil {
+		return nil, err
+	}
+	if err := r.db.Raw(`SELECT t AS name, COUNT(*) AS count FROM articles, unnest(sentiment_tickers) t WHERE `+window+` GROUP BY t ORDER BY count DESC LIMIT 12`, days).Scan(&f.Tickers).Error; err != nil {
+		return nil, err
+	}
+
+	var sent []FacetCount
+	if err := r.db.Raw(`SELECT COALESCE(NULLIF(sentiment, ''), 'unanalyzed') AS name, COUNT(*) AS count FROM articles WHERE `+window+` GROUP BY 1`, days).Scan(&sent).Error; err != nil {
+		return nil, err
+	}
+	for _, s := range sent {
+		f.Sentiment[s.Name] = s.Count
+	}
+
+	if err := r.db.Raw(`
+		SELECT to_char(d::date, 'YYYY-MM-DD') AS date,
+		       COUNT(a.id) AS total,
+		       COUNT(a.id) FILTER (WHERE a.sentiment = 'bullish') AS bullish,
+		       COUNT(a.id) FILTER (WHERE a.sentiment = 'neutral') AS neutral,
+		       COUNT(a.id) FILTER (WHERE a.sentiment = 'bearish') AS bearish
+		FROM generate_series((NOW() - make_interval(days => ?))::date, NOW()::date, interval '1 day') d
+		LEFT JOIN articles a ON a.published_date::date = d::date
+		GROUP BY d ORDER BY d`, days-1).Scan(&f.Daily).Error; err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
 func mapArticleModel(row models.Article) NewsArticle {
 	tags := []string(row.Tags)
 	if tags == nil {
@@ -192,7 +315,20 @@ func mapArticleModel(row models.Article) NewsArticle {
 		SentimentConfidence: row.SentimentConfidence,
 		SentimentTickers:    tickers,
 		SentimentAnalyzedAt: row.SentimentAnalyzedAt,
+		ReadingTimeMin:      readingTimeMinutes(row.Content),
 	}
+}
+
+// readingTimeMinutes estimates reading time at ~200 words per minute (minimum 1).
+func readingTimeMinutes(content string) int {
+	words := len(strings.Fields(content))
+	if words == 0 {
+		return 0
+	}
+	if m := (words + 199) / 200; m > 1 {
+		return m
+	}
+	return 1
 }
 
 func (r *PostgresNewsRepository) DeleteNews(id string) error {
