@@ -183,6 +183,7 @@ func SetupRouter() *gin.Engine {
 		marketDataAdminController := controllers.NewMarketDataAdminController()
 		routes.SetupAdminRoutes(api, adminController, inviteCodesAdminController, organizationController, corporateActionController, auditController, adminAnalyticsController, fundamentalsController, embeddingsAdminController, marketDataAdminController, chatController, auditRepo, earningsController)
 		routes.SetupFundamentalsPublicRoutes(api, fundamentalsController)
+		routes.SetupMarketOverviewRoutes(api, controllers.NewMarketOverviewController())
 		routes.SetupWatchlistRoutes(api, watchlistController)
 		routes.SetupPortfolioRoutes(api, portfolioController, subscriptionService)
 		routes.SetupAdvisoryRoutes(api, advisoryController, subscriptionService)
