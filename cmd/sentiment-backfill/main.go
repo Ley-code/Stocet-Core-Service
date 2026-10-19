@@ -29,6 +29,7 @@ func main() {
 	reset := flag.Bool("reset", false, "first clear sentiment stamped by a failure (neutral with no confidence)")
 	batch := flag.Int("batch", 20, "articles per batch")
 	max := flag.Int("max", 5000, "stop after this many articles")
+	pause := flag.Duration("pause", 0, "wait between batches (free-tier limits are per minute; e.g. 45s with -batch 10)")
 	model := flag.String("model", "", "override the chat model for this run only (e.g. gemini-flash-lite-latest); default: GEMINI_CHAT_MODEL")
 	backup := flag.String("backup", "sentiment_reset_backup.json", "where to save reset rows before clearing them")
 	flag.Parse()
@@ -84,7 +85,7 @@ func main() {
 	}
 
 	ctx := context.Background()
-	done := 0
+	done, stalls := 0, 0
 	for done < *max {
 		n, err := ai.RunSentimentBackfillOnce(ctx, client, repo, *batch)
 		if err != nil {
@@ -93,9 +94,29 @@ func main() {
 		}
 		done += n
 		fmt.Printf("  classified %d so far\n", done)
-		if n < *batch {
-			break // partial batch: either nothing left, or the API started failing
+		if n == 0 {
+			// Nothing processed: either nothing is left, or the API is refusing us.
+			var waitingNow int64
+			db.Raw(`SELECT count(*) FROM articles WHERE sentiment IS NULL OR sentiment = ''`).Scan(&waitingNow)
+			if waitingNow == 0 {
+				break
+			}
+			stalls++
+			if stalls >= 4 {
+				fmt.Println("no progress for 4 batches in a row - daily quota is probably exhausted; stopping (re-run later)")
+				break
+			}
+			fmt.Println("  rate limited, waiting 75s...")
+			time.Sleep(75 * time.Second)
+			continue
 		}
+		stalls = 0
+		if n < *batch {
+			// partial batch: the per-minute limit was hit mid-way; give it a minute to recover
+			time.Sleep(75 * time.Second)
+			continue
+		}
+		time.Sleep(*pause)
 	}
 	var left int64
 	db.Raw(`SELECT count(*) FROM articles WHERE sentiment IS NULL OR sentiment = ''`).Scan(&left)
