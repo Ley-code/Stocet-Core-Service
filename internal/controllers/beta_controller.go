@@ -1,22 +1,28 @@
 package controllers
 
 import (
+	"fmt"
+	"html"
 	"net/http"
+	"os"
 	"net/mail"
 	"strings"
 	"time"
 	"unicode/utf8"
 
 	"stocet-core-service/internal/database"
+	"stocet-core-service/internal/email"
 	"stocet-core-service/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
 
 // BetaController handles the invite-only beta funnel: public waitlist, in-app feedback, admin review, and a data-freshness health check.
-type BetaController struct{}
+type BetaController struct {
+	mailer email.Sender
+}
 
-func NewBetaController() *BetaController { return &BetaController{} }
+func NewBetaController(mailer email.Sender) *BetaController { return &BetaController{mailer: mailer} }
 
 func clip(s string, max int) string {
 	s = strings.TrimSpace(s)
@@ -207,4 +213,75 @@ func (c *BetaController) DataHealth(ctx *gin.Context) {
 	}
 	out["status"] = "ok"
 	ctx.JSON(http.StatusOK, out)
+}
+
+// AdminInviteCodes godoc — GET /admin/beta/codes: active invite codes that still have uses left.
+func (c *BetaController) AdminInviteCodes(ctx *gin.Context) {
+	rows := []map[string]interface{}{}
+	if err := database.DB.Raw(`SELECT code, description, max_uses, current_uses, (max_uses - current_uses) AS remaining
+		FROM invite_codes WHERE is_active AND current_uses < max_uses ORDER BY created_at DESC`).Scan(&rows).Error; err != nil {
+		utils.InternalServerError(ctx, err, "Failed to load invite codes")
+		return
+	}
+	utils.SuccessResponse(ctx, 200, gin.H{"codes": rows}, "")
+}
+
+// AdminSendInvite godoc — POST /admin/beta/waitlist/:id/send-invite  {code}
+// Emails the person their invite code and marks them invited ONLY if the email was actually sent.
+func (c *BetaController) AdminSendInvite(ctx *gin.Context) {
+	var req struct {
+		Code string `json:"code"`
+	}
+	if err := ctx.ShouldBindJSON(&req); err != nil || strings.TrimSpace(req.Code) == "" {
+		utils.BadRequest(ctx, "Choose an invite code to send")
+		return
+	}
+	if c.mailer == nil || !c.mailer.Enabled() {
+		utils.BadRequest(ctx, "Email is not configured on the server (set SMTP_HOST, SMTP_PORT, SMTP_FROM and credentials)")
+		return
+	}
+	code := strings.TrimSpace(req.Code)
+	var usable int64
+	database.DB.Raw(`SELECT count(*) FROM invite_codes WHERE code = ? AND is_active AND current_uses < max_uses`, code).Scan(&usable)
+	if usable == 0 {
+		utils.BadRequest(ctx, "That invite code is inactive or has no uses left")
+		return
+	}
+	var person struct {
+		Email    string
+		FullName string
+	}
+	if err := database.DB.Raw(`SELECT email, full_name FROM waitlist_signups WHERE id = ?`, ctx.Param("id")).Scan(&person).Error; err != nil || person.Email == "" {
+		utils.NotFound(ctx, "Waitlist entry not found")
+		return
+	}
+
+	site := strings.TrimRight(os.Getenv("PUBLIC_SITE_URL"), "/")
+	signup := site + "/signup"
+	if site == "" {
+		signup = "the Stocet sign-up page"
+	}
+	name := strings.TrimSpace(person.FullName)
+	greet := "Hello"
+	if name != "" {
+		greet = "Hello " + html.EscapeString(strings.Fields(name)[0])
+	}
+	link := html.EscapeString(signup)
+	if site != "" {
+		link = fmt.Sprintf(`<a href="%s" style="color:#ff6b35">%s</a>`, html.EscapeString(signup), html.EscapeString(signup))
+	}
+	body := fmt.Sprintf(`<div style="font-family:Arial,sans-serif;max-width:520px;margin:auto;color:#111">
+<h2 style="margin-bottom:4px">Your Stocet beta invite</h2>
+<p>%s, thanks for asking to join the Stocet beta. Here is your invite code:</p>
+<p style="font-size:22px;letter-spacing:2px;font-family:monospace;background:#f3f4f6;padding:12px 16px;border-radius:8px;display:inline-block"><b>%s</b></p>
+<p>Create your account at %s and enter the code when asked. The code is for you; please don't share it.</p>
+<p>Stocet is an independent project and a beta: things may break, and numbers can contain errors. Please use the Feedback button inside the app to tell us what you find, it's the whole point of the beta.</p>
+<p style="color:#666;font-size:12px">Stocet provides information, not investment advice, and is not affiliated with the Ethiopian Securities Exchange or ECMA.</p>
+</div>`, greet, html.EscapeString(code), link)
+	if err := c.mailer.SendHTML(person.Email, "Your Stocet beta invite", body); err != nil {
+		utils.InternalServerError(ctx, err, "The email could not be sent. Nothing was marked as invited.")
+		return
+	}
+	database.DB.Exec(`UPDATE waitlist_signups SET invite_sent_at = now() WHERE id = ?`, ctx.Param("id"))
+	utils.SuccessResponse(ctx, 200, gin.H{"sent_to": person.Email}, "Invite sent")
 }

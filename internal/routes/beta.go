@@ -16,6 +16,8 @@ func SetupBetaRoutes(api *gin.RouterGroup, c *controllers.BetaController) {
 	{
 		admin.GET("/waitlist", c.AdminWaitlist)
 		admin.PATCH("/waitlist/:id/invited", c.AdminMarkInvited)
+		admin.POST("/waitlist/:id/send-invite", c.AdminSendInvite)
+		admin.GET("/codes", c.AdminInviteCodes)
 		admin.GET("/feedback", c.AdminFeedback)
 		admin.PATCH("/feedback/:id", c.AdminFeedbackStatus)
 	}

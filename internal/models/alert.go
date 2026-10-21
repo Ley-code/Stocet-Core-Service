@@ -43,10 +43,10 @@ type AlertTriggerHistory struct {
 	UserID         uuid.UUID `gorm:"column:user_id;type:uuid;not null" json:"user_id"`
 	Ticker         string    `gorm:"not null" json:"ticker"`
 	AlertType      AlertType `gorm:"column:alert_type;not null" json:"alert_type"`
-	Condition      string    `gorm:"column:condition" json:"condition,omitempty"`
-	Threshold      float64   `gorm:"column:threshold" json:"threshold,omitempty"`
-	TriggeredPrice float64   `gorm:"column:triggered_price" json:"triggered_price,omitempty"`
-	PercentChange  float64   `gorm:"column:percent_change" json:"percent_change,omitempty"`
+	Condition      string    `gorm:"column:condition" json:"condition"`
+	Threshold      float64   `gorm:"column:threshold" json:"threshold"`
+	TriggeredPrice float64   `gorm:"column:triggered_price" json:"triggered_price"`
+	PercentChange  float64   `gorm:"column:percent_change" json:"percent_change"`
 	TriggeredAt    time.Time `gorm:"column:triggered_at;not null;default:now()" json:"triggered_at"`
 }
 
