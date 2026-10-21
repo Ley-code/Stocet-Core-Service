@@ -137,6 +137,9 @@ type VerifyEmailRequest struct {
 type VerifyEmailResponse struct {
 	Email      string `json:"email"`
 	IsVerified bool   `json:"is_verified"`
+	// Proving control of the inbox is a login, so the new user is signed in without a separate login step.
+	Token string       `json:"token,omitempty"`
+	User  *UserProfile `json:"user,omitempty"`
 }
 
 func (s *AuthService) Login(req LoginRequest) (*AuthResponse, error) {
@@ -162,6 +165,13 @@ func (s *AuthService) Login(req LoginRequest) (*AuthResponse, error) {
 		return nil, errors.New("invalid credentials")
 	}
 
+	return s.buildAuthResponse(user)
+}
+
+// buildAuthResponse issues a session token and profile for an already-authenticated user.
+// Shared by password login and email verification so both produce identical sessions.
+func (s *AuthService) buildAuthResponse(user *models.User) (*AuthResponse, error) {
+	var err error
 	effective := string(user.SubscriptionStatus)
 	if s.subSvc != nil {
 		effective, err = s.subSvc.EffectiveTier(user.ID)
@@ -350,10 +360,14 @@ func (s *AuthService) VerifyEmail(req VerifyEmailRequest) (*VerifyEmailResponse,
 		return nil, errors.New("failed to finalize verification")
 	}
 
-	return &VerifyEmailResponse{
-		Email:      email,
-		IsVerified: true,
-	}, nil
+	resp := &VerifyEmailResponse{Email: email, IsVerified: true}
+	// Best effort: if the session can't be built the user simply signs in manually.
+	if user, uerr := s.userRepo.GetByEmail(email); uerr == nil {
+		if auth, aerr := s.buildAuthResponse(user); aerr == nil {
+			resp.Token, resp.User = auth.Token, auth.User
+		}
+	}
+	return resp, nil
 }
 
 func generateVerificationCode() (string, error) {
