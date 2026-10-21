@@ -43,7 +43,7 @@ func SetupRouter() *gin.Engine {
 	educationRepo := repositories.NewEducationRepository()
 	chatRepo := repositories.NewChatRepository()
 	alertsRepo := repositories.NewAlertsRepository()
-	emailSender := email.NewSMTPSender(config.AppConfig)
+	emailSender := email.NewSender(config.AppConfig)
 	fcmService := push.NewFCMService(config.AppConfig.FCMProjectID, config.AppConfig.FCMServiceAccountJSON)
 	notificationsRepo := repositories.NewNotificationsRepository(emailSender, fcmService)
 	verificationCodeRepo := repositories.NewVerificationCodeRepository()

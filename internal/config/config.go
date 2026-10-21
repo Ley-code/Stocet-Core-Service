@@ -37,10 +37,12 @@ type Config struct {
 	SMTPUsername string
 	SMTPPassword string
 	SMTPFrom     string
+	// Resend HTTPS API key; when set it is used instead of SMTP (needed where SMTP ports are blocked)
+	ResendAPIKey string
 
 	// AI — Claude (chat / tool-calling)
-	ClaudeAPIKey  string
-	ClaudeModel   string
+	ClaudeAPIKey string
+	ClaudeModel  string
 
 	// AI — Gemini (embeddings / RAG only; chat has moved to Claude)
 	GeminiAPIKey          string
@@ -96,9 +98,10 @@ func LoadConfig() error {
 		SMTPUsername: getEnv("SMTP_USERNAME", ""),
 		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
 		SMTPFrom:     getEnv("SMTP_FROM", ""),
+		ResendAPIKey: getEnv("RESEND_API_KEY", ""),
 
-		ClaudeAPIKey:  getEnv("CLAUDE_API_KEY", ""),
-		ClaudeModel:   getEnv("CLAUDE_MODEL", "claude-haiku-4-5"),
+		ClaudeAPIKey: getEnv("CLAUDE_API_KEY", ""),
+		ClaudeModel:  getEnv("CLAUDE_MODEL", "claude-haiku-4-5"),
 
 		GeminiAPIKey:          getEnv("GEMINI_API_KEY", ""),
 		GeminiChatModel:       getEnv("GEMINI_CHAT_MODEL", "gemini-2.5-flash"),
