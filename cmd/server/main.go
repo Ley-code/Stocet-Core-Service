@@ -153,6 +153,8 @@ func SetupRouter() *gin.Engine {
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "healthy"})
 	})
+	betaController := controllers.NewBetaController()
+	router.GET("/health/data", betaController.DataHealth)
 
 	// API routes
 	api := router.Group(config.API_PREFIX)
@@ -161,6 +163,7 @@ func SetupRouter() *gin.Engine {
 		routes.SetupNewsRoutes(api, newsController, articleInteractionsController)
 		routes.SetupMarketDataRoutes(api, marketDataController)
 		routes.SetupPaperTradeRoutes(api, paperTradeController)
+		routes.SetupBetaRoutes(api, betaController)
 		routes.SetupCapitalServiceProviderRoutes(api, cspController)
 		routes.SetupEducationRoutes(api, educationController)
 		routes.SetupChatRoutes(api, chatController)
